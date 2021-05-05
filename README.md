@@ -90,7 +90,7 @@ Q.Q.R.I.viewerは、Pillow(PIL fork)が対応している画像と8bit/16bit/32b
 ### 挙動が同期した、複数の画像表示と画像解析ツール
 Q.Q.R.I.viewerのmain windowは「image view」というウィジェットを複数表示することができ、それぞれの挙動はリンクしています。  
 「image view」の主な機能は以下の通りです。  
-![imgmove2](https://user-images.githubusercontent.com/47070478/117132941-87f11200-adde-11eb-8433-1f9ce47a841d.gif)  
+![g8218](https://user-images.githubusercontent.com/47070478/117118478-c4ffd900-adcb-11eb-9c38-637a62aca6c2.png)  
 
 #### (1)画像表示機能  
 左ドラッグで画像の移動、マウスホイールもしくは右ドラッグで拡大縮小ができます。  
