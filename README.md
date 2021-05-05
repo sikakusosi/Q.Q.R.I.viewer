@@ -58,6 +58,15 @@ The behavior of the ROI is synchronized among multiple image views.
 ![roi](https://user-images.githubusercontent.com/47070478/117131143-026c6280-addc-11eb-9ebb-dddb1d072fe0.gif)  
 
 
+## Required Libraries  
+- PyQt5  
+- pyqtgraph  
+- numpy  
+- Pillow  
+- matplotlib  
+(and the libraries needed to use these libraries)  
+
+
 ## In the future
 I will continue to work on the development of a quick response image viewer.  
 If there are any bugs or features you would like to see added, please let me know.  
@@ -129,6 +138,13 @@ analyze windowにROI部分のヒストグラム、統計量を表示します。
 またROIは、複数のimage view間で挙動が同期します。  
 ![roi](https://user-images.githubusercontent.com/47070478/117131143-026c6280-addc-11eb-9ebb-dddb1d072fe0.gif)  
 
+## 必要なライブラリ
+- PyQt5  
+- pyqtgraph  
+- numpy  
+- Pillow  
+- matplotlib  
+(またこれらのライブラリを使用するために必要なライブラリ)  
 
 ## 今後
 高速なレスポンスの画像ビューアを目指して開発を続けて行きます。  
