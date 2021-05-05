@@ -1,3 +1,7 @@
+# Readme
+![qqri_icon1](https://user-images.githubusercontent.com/47070478/117133652-7ceab180-addf-11eb-8492-e6a4789c37f1.png)  
+
+
 # Q.Q.R.I.viewer  
 Q.Q.R.I.viewer is an open source image viewing and image analysis program implemented using Python 3 (PyQt5).  
 We created it because we wanted an image viewer with quick response, direct data transfer from Python, and image analysis capability.  
