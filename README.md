@@ -21,6 +21,10 @@ The following methods can be used to load images.
 
 ### Multiple image display and image analysis tools with synchronized behavior
 Q.Q.R.I.viewer's main window can display multiple widgets called "image view", and their behaviors are linked to each other.   
+The image view can be increased or decreased.  
+![imgview_add_del](https://user-images.githubusercontent.com/47070478/117156993-2b4f2080-adf9-11eb-8269-0b8a811a280e.gif)  
+
+
 The main functions of "image view" are as follows.  
 ![g8218](https://user-images.githubusercontent.com/47070478/117118478-c4ffd900-adcb-11eb-9c38-637a62aca6c2.png)
 
@@ -102,6 +106,9 @@ Q.Q.R.I.viewerは、Pillow(PIL fork)が対応している画像と8bit/16bit/32b
 
 ### 挙動が同期した、複数の画像表示と画像解析ツール
 Q.Q.R.I.viewerのmain windowは「image view」というウィジェットを複数表示することができ、それぞれの挙動はリンクしています。  
+image viewは増減させることができます。  
+![imgview_add_del](https://user-images.githubusercontent.com/47070478/117156993-2b4f2080-adf9-11eb-8269-0b8a811a280e.gif)  
+
 「image view」の主な機能は以下の通りです。  
 ![g8218](https://user-images.githubusercontent.com/47070478/117118478-c4ffd900-adcb-11eb-9c38-637a62aca6c2.png)  
 
