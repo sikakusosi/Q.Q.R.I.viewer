@@ -1,6 +1,6 @@
 # Readme
 ![qqri_icon1](https://user-images.githubusercontent.com/47070478/117133652-7ceab180-addf-11eb-8492-e6a4789c37f1.png)  
-
+日本語のreadmeは下にあります。  
 
 # Q.Q.R.I.viewer  
 Q.Q.R.I.viewer is an open source image viewing and image analysis program implemented using Python 3 (PyQt5).  
@@ -61,7 +61,7 @@ The behavior of the ROI is synchronized among multiple image views.
 ## In the future
 I will continue to work on the development of a quick response image viewer.  
 If there are any bugs or features you would like to see added, please let me know.  
-I am also looking for members who are willing to develop with me.  
+I am also looking for members who are willing to develop Q.Q.R.I.viewer with me.  
 
 ### Features to be added in the future
 Faster image loading  
