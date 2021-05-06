@@ -5,7 +5,7 @@
 # Q.Q.R.I.viewer  
 Q.Q.R.I.viewer is an open source image viewing and image analysis program implemented using Python 3 (PyQt5).  
 We created it because we wanted an image viewer with quick response, direct data transfer from Python, and image analysis capability.  
-("Q.Q.R.I.viewer" is an abbreviation for pyQt-based Quick Response Image viewer)  
+("Q.Q.R.I.viewer" is an abbreviation for pyQt-based Quick Response Image viewer.Pronounce it "kukuri viewer".)  
 
 ## Functions of Q.Q.R.I.viewer  
 ### Multiple image loading methods for multiple image formats.  
@@ -89,7 +89,7 @@ Simple image processing simulation (blurring, sharpening, gamma, etc.)
 # Q.Q.R.I.viewer
 Q.Q.R.I.viewerは、Python3(PyQt5)を用いて実装されたオープンソースの画像閲覧&画像解析プログラムです。  
 高速レスポンスかつPythonから直接データを渡せて、画像解析可能な画像ビューアが欲しかったので作りました。  
-(「Q.Q.R.I.viewer」は、pyQt-based Quick Response Image viewer の略称です。)  
+(「Q.Q.R.I.viewer」は、pyQt-based Quick Response Image viewer の略称です。「ククリビューワ」と読んでください。)  
 
 
 ## Q.Q.R.I.viewerの機能
