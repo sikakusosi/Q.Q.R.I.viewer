@@ -61,6 +61,21 @@ The histogram and statistics of the ROI will be displayed in the analyze window.
 The behavior of the ROI is synchronized among multiple image views.  
 ![roi](https://user-images.githubusercontent.com/47070478/117131143-026c6280-addc-11eb-9ebb-dddb1d072fe0.gif)  
 
+## Interactively manipulating the Q.Q.R.I. viewer from a Python shell
+When QQRIviewer_use_sample.py is run, it will not accept input from the Python shell.  
+This is normal behavior according to the PyQt5 specification, but there are times when you want to interactively manipulate the Q.Q.R.I. viewer from the Python shell.  
+To do so, start a Python shell and execute the following lines one by one.  
+
+``` 
+$> python  
+>>>QtWidgets import QApplication  
+>>>import QQRIviewer as qv  
+>>>app = QApplication([])  
+>>>Qqri = qv.QqriWindow()  
+>>>qqri.show()  
+>>>qqri.raise_()  
+```
+  
 
 ## Required Libraries  
 - PyQt5  
@@ -144,6 +159,22 @@ image viewは増減させることができます。
 analyze windowにROI部分のヒストグラム、統計量を表示します。  
 またROIは、複数のimage view間で挙動が同期します。  
 ![roi](https://user-images.githubusercontent.com/47070478/117131143-026c6280-addc-11eb-9ebb-dddb1d072fe0.gif)  
+
+
+## PythonシェルからQ.Q.R.I.viewerをインタラクティブに操作する  
+QQRIviewer_use_sample.pyを実行した場合、Pythonシェルからの入力を受け付けなくなります。  
+これはPyQt5仕様上正常な動作ですが、PythonシェルからQ.Q.R.I.viewerをインタラクティブに操作したい場合もあると思われます。  
+その際はPythonシェル起動後、下記を1行づつ実行してください。  
+
+```
+$> python  
+>>>from PyQt5.QtWidgets import QApplication  
+>>>import QQRIviewer as qv  
+>>>app = QApplication([])  
+>>>qqri = qv.QqriWindow()  
+>>>qqri.show()  
+>>>qqri.raise_()  
+```
 
 ## 必要なライブラリ
 - PyQt5  
