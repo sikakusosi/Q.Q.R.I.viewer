@@ -10,7 +10,7 @@ from pyqtgraph.Qt import QtGui, QtCore
 import numpy as np
 from PIL import Image, ImageFile
 from matplotlib.pyplot import get_cmap
-
+import time
 
 def roi_pixel_num(img,axis=None):# axis is dummy
     if img.ndim == 3:
@@ -270,6 +270,16 @@ class ImageviewWidget(QtGui.QWidget):
         self.img_hist = self.hist_widget.addPlot(0,0)
         self.img_hist.showGrid(x=True, y=True, alpha=0.8)
 
+        self.img_hist_plot0 = pg.PlotDataItem(np.array([0, 0, 0]), np.array([0, 0]),
+                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
+        self.img_hist_plot1 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),
+                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
+        self.img_hist_plot2 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),
+                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,10,255),width=2))
+        self.img_hist.addItem(self.img_hist_plot0)
+        self.img_hist.addItem(self.img_hist_plot1)
+        self.img_hist.addItem(self.img_hist_plot2)
+
         # hist region
         self.hist_region = pg.LinearRegionItem(swapMode='block')
         self.hist_region.setZValue(10)
@@ -312,8 +322,8 @@ class ImageviewWidget(QtGui.QWidget):
 
         # setting領域コネクト
         self.hist_region.sigRegionChangeFinished.connect(self.update_img_level_by_region)
-        self.view_min_text.editingFinished.connect(self.img_view_min_max_set)
-        self.view_max_text.editingFinished.connect(self.img_view_min_max_set)
+        self.view_min_text.editingFinished.connect(self.update_img_level_by_text)
+        self.view_max_text.editingFinished.connect(self.update_img_level_by_text)
 
         pass
 
@@ -322,9 +332,9 @@ class ImageviewWidget(QtGui.QWidget):
     #                                        Image reading by Drag&Drop
     ####################################################################################################################
     def update_img(self):
+
         # image 更新
         self.img.setImage(self.input_img)
-        print(np.shape(self.input_img)[1], np.shape(self.input_img)[0])
         self.img.setRect(pg.QtCore.QRectF(-0.5, -0.5, np.shape(self.input_img)[1], np.shape(self.input_img)[0]))
         self.tmb_img.setImage(self.input_img)
         self.img_ch = None
@@ -333,41 +343,39 @@ class ImageviewWidget(QtGui.QWidget):
         elif np.ndim(self.input_img) == 2:
             self.img_ch = 1
 
-        # 統計量更新
-        self.img_path_str = str(self.img_path)
-        self.img_max = np.max(self.input_img)
-        self.img_min = np.min(self.input_img)
-        self.img_max_min_diff = self.img_max - self.img_min
-        self.img_maxS = (self.img_max * self.img_max)
-        self.img_mean = np.mean(self.input_img)
-        self.img_mean0 = self.input_img - self.img_mean
-        self.img_std = np.std(self.input_img)
-        self.img_is_stored = True
 
-        # min-max更新
-        self.view_min_text.setText(str(self.img_min))
-        self.view_max_text.setText(str(self.img_max))
+        #
+        self.img_path_str = str(self.img_path)
+        self.view_max_in = np.max(self.input_img)
+        self.view_min_in = np.min(self.input_img)
+        self.img_is_stored = True
 
         # hist更新
         if self.img_ch == 3:
-            y, x = np.histogram(self.input_img[:, :, 0], bins=np.arange(np.min(self.input_img[:, :, 0]),np.max(self.input_img[:, :, 0])+2))
-            self.img_hist.plot(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
-            y, x = np.histogram(self.input_img[:, :, 1], bins=np.arange(np.min(self.input_img[:, :, 1]),np.max(self.input_img[:, :, 1])+2))
-            self.img_hist.plot(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
-            y, x = np.histogram(self.input_img[:, :, 2], bins=np.arange(np.min(self.input_img[:, :, 2]),np.max(self.input_img[:, :, 2])+2))
-            self.img_hist.plot(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(50,100,255),width=2))
+            y, x = np.histogram(self.input_img[:, :, 0], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
+
+            y, x = np.histogram(self.input_img[:, :, 1], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
+
+            y, x = np.histogram(self.input_img[:, :, 2], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(50,100,255),width=2))
+
             #【追加】ーcolorbarがある場合、削除する関数実行
         elif self.img_ch == 1:
-            y, x = np.histogram(self.input_img, bins=np.arange(np.min(self.input_img),np.max(self.input_img)+2))
-            self.img_hist.plot(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+            y, x = np.histogram(self.input_img, range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
             self.set_colormap()
 
         self.input_img = None
-
-        self.img_view_min_max_set()
+        self.update_region()
+        self.update_minmax_text()
 
         for i in np.arange(0,self.img_loi_id):
             self.add_xyprf_linking_imgLOI(i)
+
         pass
 
     def dragEnterEvent(self, event):
@@ -456,7 +464,7 @@ class ImageviewWidget(QtGui.QWidget):
         pass
 
     ####################################################################################################################
-    #                                     Image view edit by Histgram&Input-number
+    #                                     Level correction
     ####################################################################################################################
     def isnum(self,str):
         try:
@@ -466,7 +474,16 @@ class ImageviewWidget(QtGui.QWidget):
         else:
             return True
 
-    def img_view_min_max_set(self):
+    def update_img_level(self):
+        if np.ndim(self.img.image)==3:
+            self.img.setLevels([[self.view_min_in, self.view_max_in],
+                                [self.view_min_in, self.view_max_in],
+                                [self.view_min_in, self.view_max_in]])
+        elif np.ndim(self.img.image)==2:
+            self.img.setLevels([self.view_min_in, self.view_max_in])
+        pass
+
+    def update_img_level_by_text(self):
         self.view_min_in = self.view_min_text.text()
         if self.isnum(self.view_min_in):
             self.view_min_in = float(self.view_min_in)
@@ -483,24 +500,17 @@ class ImageviewWidget(QtGui.QWidget):
         self.hist_region.setRegion([self.view_min_in, self.view_max_in])
         pass
 
-    def update_minmax_text(self):
-        self.view_min_text.setText(str(self.view_min_in))
-        self.view_max_text.setText(str(self.view_max_in))
-        pass
 
     def update_img_level_by_region(self):
         self.hist_region.setZValue(10)
         self.view_min_in, self.view_max_in = self.hist_region.getRegion()
         self.update_img_level()
         self.update_minmax_text()
+        pass
 
-    def update_img_level(self):
-        if np.ndim(self.img.image)==3:
-            self.img.setLevels([[self.view_min_in, self.view_max_in],
-                                [self.view_min_in, self.view_max_in],
-                                [self.view_min_in, self.view_max_in]])
-        elif np.ndim(self.img.image)==2:
-            self.img.setLevels([self.view_min_in, self.view_max_in])
+    def update_minmax_text(self):
+        self.view_min_text.setText(str(self.view_min_in))
+        self.view_max_text.setText(str(self.view_max_in))
         pass
 
 
@@ -676,9 +686,8 @@ class QqriWindow(QtWidgets.QMainWindow):
         # self.whole_img_data = None
         self.img_path_list = []
         self.ref_menu_list = []
-        self.ref_action_list = []
-        self.ref_num = -1
-
+        self.img_view_state = 'normal'
+        self.input_img_list = []
 
         self.setWindowTitle('Q.Q.R.I.viewer Ver0.5')
         self.setAcceptDrops(True)
@@ -686,7 +695,7 @@ class QqriWindow(QtWidgets.QMainWindow):
         self.init_menu()
         self.init_statusBar()
         self.init_analyze_window()
-        self.open_analyze_window()
+
 
     def init_layout(self):
         #
@@ -730,23 +739,23 @@ class QqriWindow(QtWidgets.QMainWindow):
         # View
         self.ViewMenu = self.menubar.addMenu('&View')
         ## View-ImgAreaR
-        self.addimgRAction = QtWidgets.QAction('&Add Image Area <Side>')
-        self.addimgRAction.setShortcut('s')
+        self.addimgRAction = QtWidgets.QAction('&Add Image View <Horizontal>')
+        self.addimgRAction.setShortcut('h')
         self.addimgRAction.triggered.connect(self.add_ImgPrfSettingWidget_R)
         self.ViewMenu.addAction(self.addimgRAction)
         ## View-ImgAreaB
-        self.addimgBAction = QtWidgets.QAction('&Add Image Area <Down>')
-        self.addimgBAction.setShortcut('d')
+        self.addimgBAction = QtWidgets.QAction('&Add Image View <Vertical>')
+        self.addimgBAction.setShortcut('v')
         self.addimgBAction.triggered.connect(self.add_ImgPrfSettingWidget_B)
         self.ViewMenu.addAction(self.addimgBAction)
         ## View-delIMGarea
-        self.delimgLAction = QtWidgets.QAction('&Erase Image Area <Side>')
-        self.delimgLAction.setShortcut('shift+s')
+        self.delimgLAction = QtWidgets.QAction('&Erase Image View <Side>')
+        self.delimgLAction.setShortcut('shift+h')
         self.delimgLAction.triggered.connect(self.del_ImgPrfSettingWidget_L)
         self.ViewMenu.addAction(self.delimgLAction)
         ## View-delIMGarea
-        self.delimgUAction = QtWidgets.QAction('&Erase Image Area <Down>')
-        self.delimgUAction.setShortcut('shift+d')
+        self.delimgUAction = QtWidgets.QAction('&Erase Image View <Down>')
+        self.delimgUAction.setShortcut('shift+v')
         self.delimgUAction.triggered.connect(self.del_ImgPrfSettingWidget_U)
         self.ViewMenu.addAction(self.delimgUAction)
 
@@ -776,8 +785,8 @@ class QqriWindow(QtWidgets.QMainWindow):
         self.open_aw_Action.triggered.connect(self.open_analyze_window)
         self.AnalyzeMenu.addAction(self.open_aw_Action)
 
-
         pass
+
 
 
     ####################################################################################################################
