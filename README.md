@@ -68,11 +68,11 @@ To do so, start a Python shell and execute the following lines one by one.
 
 ``` 
 $> python  
->>>QtWidgets import QApplication  
->>>import QQRIviewer as qv  
->>>app = QApplication([])  
->>>Qqri = qv.QqriWindow()  
->>>qqri.show()  
+>>>from PyQt5.QtWidgets import QApplication
+>>>import QQRIviewer as qv
+>>>app = QApplication([])
+>>>qqri = qv.QqriWindow()
+>>>qqri.show()
 >>>qqri.raise_()  
 ```
   
@@ -166,13 +166,13 @@ QQRIviewer_use_sample.pyを実行した場合、Pythonシェルからの入力�
 これはPyQt5仕様上正常な動作ですが、PythonシェルからQ.Q.R.I.viewerをインタラクティブに操作したい場合もあると思われます。  
 その際はPythonシェル起動後、下記を1行づつ実行してください。  
 
-```
+``` 
 $> python  
->>>from PyQt5.QtWidgets import QApplication  
->>>import QQRIviewer as qv  
->>>app = QApplication([])  
->>>qqri = qv.QqriWindow()  
->>>qqri.show()  
+>>>from PyQt5.QtWidgets import QApplication
+>>>import QQRIviewer as qv
+>>>app = QApplication([])
+>>>qqri = qv.QqriWindow()
+>>>qqri.show()
 >>>qqri.raise_()  
 ```
 
