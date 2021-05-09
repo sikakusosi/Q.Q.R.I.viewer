@@ -62,10 +62,15 @@ The behavior of the ROI is synchronized among multiple image views.
 ![roi](https://user-images.githubusercontent.com/47070478/117131143-026c6280-addc-11eb-9ebb-dddb1d072fe0.gif)  
 
 ## Interactively manipulating the Q.Q.R.I. viewer from a Python shell
-When QQRIviewer_use_sample.py is run, it will not accept input from the Python shell.  
-This is normal behavior according to the PyQt5 specification, but there are times when you want to interactively manipulate the Q.Q.R.I. viewer from the Python shell.  
-To do so, start a Python shell and execute the following lines one by one.  
+If you run QQRIviewer_use_sample.py, it will not accept input from the Python shell.    
+This is normal behavior according to the PyQt5 specification, but there may be times when you want to interactively control the Q.Q.R.I. viewer from a Python shell.  
+In this case, run "QQRIviewer_use_sample_interactive.py" as shown below.  
+  
+```
+python -i QQRIviewer_use_sample_interactive.py
+```
 
+Alternatively, start a Python shell and run the following one line at a time.   
 ``` 
 $> python  
 >>>from PyQt5.QtWidgets import QApplication
@@ -164,8 +169,13 @@ analyze windowにROI部分のヒストグラム、統計量を表示します。
 ## PythonシェルからQ.Q.R.I.viewerをインタラクティブに操作する  
 QQRIviewer_use_sample.pyを実行した場合、Pythonシェルからの入力を受け付けなくなります。  
 これはPyQt5仕様上正常な動作ですが、PythonシェルからQ.Q.R.I.viewerをインタラクティブに操作したい場合もあると思われます。  
-その際はPythonシェル起動後、下記を1行づつ実行してください。  
+その場合は「QQRIviewer_use_sample_interactive.py」を下記のように実行してください。  
+  
+```
+python -i QQRIviewer_use_sample_interactive.py  
+```
 
+もしくはPythonシェル起動後、下記を1行づつ実行してください。  
 ``` 
 $> python  
 >>>from PyQt5.QtWidgets import QApplication
