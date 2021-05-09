@@ -1,4 +1,3 @@
-
 # 標準ライブラリ
 from pathlib import Path
 import urllib.parse
@@ -393,18 +392,6 @@ class ImageviewWidget(QtGui.QWidget):
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
         self.img_read_update()
-        # try:
-        #     # PILLOW can open:BMP,EPS,GIF,ICNS,IM,JPEG,JPEG 2000,MSP,PCX,PNG,PPM,SPIDER,TIFF,WebP,XBM,
-        #     #                 CUR,DCX,DDS,FLI,FLC,FPX,FTEX,GBR,GD,ICO,IMT,IPTC/NAA,MCIDAS,MIC,MPO,PCD,PIXAR,PSD,SGI,TGA,WAL,XPM
-        #     self.input_img = np.array(Image.open(str(self.img_path))).astype(float)
-        # except OSError as e:
-        #     # unknown image
-        #     # pop up dialog for binary data and open
-        #     self.read_binary_img_with_dialog()
-        #     pass
-        #
-        # # 画像更新
-        # self.update_img()
         pass
 
     def img_read_update(self):
@@ -869,7 +856,6 @@ class QqriWindow(QtWidgets.QMainWindow):
                 self.img_plot_list[y][x].roi_hist.addItem(self.img_plot_list[y][x].img_roi[-1].roi_hist_plot0) # analyze windowのplotItemに RectROI_IDのPlotDataItemをadd
                 self.img_plot_list[y][x].roi_hist.addItem(self.img_plot_list[y][x].img_roi[-1].roi_hist_plot1) # analyze windowのplotItemに RectROI_IDのPlotDataItemをadd
                 self.img_plot_list[y][x].roi_hist.addItem(self.img_plot_list[y][x].img_roi[-1].roi_hist_plot2) # analyze windowのplotItemに RectROI_IDのPlotDataItemをadd
-                # self.analyze_window_ui.roi_table_widget.setItem()
         self.add_col_analyze_table()
         pass
 
@@ -895,11 +881,6 @@ class QqriWindow(QtWidgets.QMainWindow):
         pos = (np.round(pos[0]+0.5)-0.5, np.round(pos[1]+0.5)-0.5)
         size = event.size()
         size = (np.floor(size[0]), np.floor(size[1]))
-        # cm = get_cmap('tab10')
-        # roi_color = (np.array(cm(id))*255).astype(np.uint8)
-        # roi_color = pg.mkColor(roi_color[0],roi_color[1],roi_color[2])
-
-        # print(event.roi_color)
 
         for y in np.arange(0,self.imgprfwidget_ynum+1):
             for x in np.arange(0,self.imgprfwidget_xnum+1):
@@ -1128,9 +1109,6 @@ class QqriWindow(QtWidgets.QMainWindow):
         if self.imgprfwidget_xnum != 0:
             for i in np.arange(self.imgprfwidget_ynum,-1,-1):
                 self.del_ImgPrfSettingWidget(i,-1)
-                # self.layout.removeWidget(self.img_plot_list[i][-1])
-                # self.analyze_window_ui.roi_hist_widget.removeItem(self.img_plot_list[i][-1].roi_hist)
-                # self.img_plot_list[i][-1].deleteLater()
                 del self.img_plot_list[i][-1]
                 time.sleep(1)
             # end
@@ -1149,9 +1127,6 @@ class QqriWindow(QtWidgets.QMainWindow):
         if self.imgprfwidget_ynum != 0:
             for i in np.arange(self.imgprfwidget_xnum,-1,-1):
                 self.del_ImgPrfSettingWidget(-1,i)
-                # self.layout.removeWidget(self.img_plot_list[-1][i])
-                # self.analyze_window_ui.roi_hist_widget.removeItem(self.img_plot_list[-1][i].roi_hist)
-                # self.img_plot_list[-1][i].deleteLater()
                 time.sleep(1)
             # end
             del self.img_plot_list[-1]
@@ -1209,3 +1184,17 @@ class QqriWindow(QtWidgets.QMainWindow):
                     self.overwrite_imageview_by_ndarray(img_list[i], y, x)
                 i = i + 1
         pass
+
+    ####################################################################################################################
+    #                                     interactive use
+    ####################################################################################################################
+    def get_imageview_image(self):
+        out_list = []
+        for y in np.arange(self.imgprfwidget_ynum+1):
+            for x in np.arange(self.imgprfwidget_xnum+1):
+                out_list.append(self.img_plot_list[y][x].img.image)
+        return out_list
+
+
+
+
