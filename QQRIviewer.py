@@ -83,8 +83,7 @@ class Binary_img_Dialog(QtWidgets.QDialog):
 
         self.setWindowTitle("Binary Image Input")
         layout = QtWidgets.QFormLayout()
-        # self.le_bit_width   = QtWidgets.QLineEdit()
-        # self.le_bit_width.setText(bit_width)
+
         self.radio_btn_8bit = QtWidgets.QRadioButton("8bit")
         self.radio_btn_16bit = QtWidgets.QRadioButton("16bit")
         self.radio_btn_16bit.setChecked(True)
@@ -96,12 +95,10 @@ class Binary_img_Dialog(QtWidgets.QDialog):
         self.le_img_width   = QtWidgets.QLineEdit()
         self.le_img_width.setText(width)
 
-        # self.le_bit_width.setValidator(QtGui.QIntValidator())
         self.le_header_byte.setValidator(QtGui.QIntValidator())
         self.le_img_height.setValidator(QtGui.QIntValidator())
         self.le_img_width.setValidator(QtGui.QIntValidator())
 
-        # layout.addRow(QtWidgets.QLabel('Bit width (Bits)'),self.le_bit_width)
         layout.addRow(QtWidgets.QLabel(' '),self.radio_btn_8bit)
         layout.addRow(QtWidgets.QLabel('Bit width'),self.radio_btn_16bit)
         layout.addRow(QtWidgets.QLabel(' '),self.radio_btn_32bit)
@@ -131,6 +128,47 @@ class Binary_img_Dialog(QtWidgets.QDialog):
             return bit_width, self.le_header_byte.text(), self.le_img_height.text(), self.le_img_width.text()
         else:
             return 'cancel','cancel','cancel','cancel'
+
+class ch_swap_Dialog(QtWidgets.QDialog):
+
+    def __init__(self, parent=None):
+        self.ok = 0
+        super(ch_swap_Dialog, self).__init__(parent)
+
+        self.setWindowTitle("Enter the path of the image to be swapped.")
+        layout = QtWidgets.QFormLayout()
+
+        self.le_path_0ch = QtWidgets.QLineEdit()
+        self.le_path_0ch.setText('')
+        self.le_path_1ch = QtWidgets.QLineEdit()
+        self.le_path_1ch.setText('')
+        self.le_path_2ch = QtWidgets.QLineEdit()
+        self.le_path_2ch.setText('')
+        layout.addRow(QtWidgets.QLabel('0ch path'), self.le_path_0ch)
+        layout.addRow(QtWidgets.QLabel('1ch path'), self.le_path_1ch)
+        layout.addRow(QtWidgets.QLabel('2ch path'), self.le_path_2ch)
+
+        self.ok_btn = QtWidgets.QPushButton('OK')
+        self.cancel_btn = QtWidgets.QPushButton('cancel')
+        self.ok_btn.clicked.connect(self.ok_click)
+        self.cancel_btn.clicked.connect(self.cancel_click)
+        layout.addRow(self.ok_btn,self.cancel_btn)
+
+        self.setLayout(layout)
+
+    def ok_click(self):
+        self.accept()
+        pass
+
+    def cancel_click(self):
+        self.reject()
+        pass
+
+    def getdata(self):
+        if self.exec_() == QtWidgets.QDialog.Accepted:
+            return self.le_path_0ch.text(), self.le_path_1ch.text(), self.le_path_2ch.text()
+        else:
+            return 'cancel','cancel','cancel'
 
 
 class analyze_window(object):
@@ -320,12 +358,72 @@ class ImageviewWidget(QtGui.QWidget):
         self.setting_layout.addWidget(self.colormap_cb, 1, 4)
         self.colormap_cb.currentIndexChanged.connect(self.set_colormap)
 
+        # ch_swap
+        self.ch_swap_btn = QtWidgets.QPushButton("ch swap", self)
+        self.setting_layout.addWidget(self.ch_swap_btn, 1, 5)
+
         # setting領域コネクト
         self.hist_region.sigRegionChangeFinished.connect(self.update_img_level_by_region)
         self.view_min_text.editingFinished.connect(self.update_img_level_by_text)
         self.view_max_text.editingFinished.connect(self.update_img_level_by_text)
+        self.ch_swap_btn.clicked.connect(self.ch_swap)
 
         pass
+
+
+    def ch_swap(self):
+        while True:
+            csd = ch_swap_Dialog()
+            path_0ch,path_1ch,path_2ch = csd.getdata()
+            if path_0ch=='cancel':
+                print('cancel')
+                break
+            else:
+                print('koko')
+                if self.img_ch==3:
+                    if not path_0ch:
+                        temp_img_0ch = self.img.image[:,:,0]
+                    else:
+                        self.read_img(path_0ch)
+                        if np.ndim(self.input_img) == 2:
+                            temp_img_0ch = self.input_img
+                        else:
+                            print('Please enter 1ch image path')
+                            break
+                    if not path_1ch:
+                        temp_img_1ch = self.img.image[:,:,1]
+                    else:
+                        self.read_img(path_1ch)
+                        if np.ndim(self.input_img) == 2:
+                            temp_img_1ch = self.input_img
+                        else:
+                            print('Please enter 1ch image path')
+                            break
+                    if not path_2ch:
+                        temp_img_2ch = self.img.image[:,:,2]
+                    else:
+                        self.read_img(path_2ch)
+                        if np.ndim(self.input_img) == 2:
+                            temp_img_2ch = self.input_img
+                        else:
+                            print('Please enter 1ch image path')
+                            break
+
+                    if np.shape(temp_img_0ch)==np.shape(temp_img_1ch) and np.shape(temp_img_1ch)==np.shape(temp_img_2ch):
+                        self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
+                        self.input_img[:,:,0] = temp_img_0ch
+                        self.input_img[:,:,1] = temp_img_1ch
+                        self.input_img[:,:,2] = temp_img_2ch
+                        self.update_img()
+                        break
+                    else:
+                        print('height or width is different between channels')
+                        break
+                else:
+                    print('now image is 1ch')
+                    break
+
+
 
 
     ####################################################################################################################
@@ -338,32 +436,32 @@ class ImageviewWidget(QtGui.QWidget):
         self.img.setRect(pg.QtCore.QRectF(-0.5, -0.5, np.shape(self.input_img)[1], np.shape(self.input_img)[0]))
         self.tmb_img.setImage(self.input_img)
         self.img_ch = None
-        if np.ndim(self.input_img) == 3 and np.shape(self.input_img)[2] == 3:
+        if np.ndim(self.img.image) == 3 and np.shape(self.img.image)[2] == 3:
             self.img_ch = 3
-        elif np.ndim(self.input_img) == 2:
+        elif np.ndim(self.img.image) == 2:
             self.img_ch = 1
 
 
         #
-        self.img_path_str = str(self.img_path)
-        self.view_max_in = np.max(self.input_img)
-        self.view_min_in = np.min(self.input_img)
+        self.img_path_str = str(self.img.image)
+        self.view_max_in = np.max(self.img.image)
+        self.view_min_in = np.min(self.img.image)
         self.img_is_stored = True
 
         # hist更新
         if self.img_ch == 3:
-            y, x = np.histogram(self.input_img[:, :, 0], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            y, x = np.histogram(self.img.image[:, :, 0], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
             self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
 
-            y, x = np.histogram(self.input_img[:, :, 1], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            y, x = np.histogram(self.img.image[:, :, 1], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
             self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
 
-            y, x = np.histogram(self.input_img[:, :, 2], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            y, x = np.histogram(self.img.image[:, :, 2], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
             self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(50,100,255),width=2))
 
             #【追加】ーcolorbarがある場合、削除する関数実行
         elif self.img_ch == 1:
-            y, x = np.histogram(self.input_img, range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
+            y, x = np.histogram(self.img.image, range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
             self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
             self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
             self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
@@ -399,22 +497,23 @@ class ImageviewWidget(QtGui.QWidget):
         print(self.img_path)
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-        self.img_read_update()
+        self.read_img()
+        self.update_img()
         pass
 
-    def img_read_update(self):
+    def read_img(self, img_path=None):
+        if img_path==None:
+            img_path = str(self.img_path)
         try:
             # PILLOW can open:BMP,EPS,GIF,ICNS,IM,JPEG,JPEG 2000,MSP,PCX,PNG,PPM,SPIDER,TIFF,WebP,XBM,
             #                 CUR,DCX,DDS,FLI,FLC,FPX,FTEX,GBR,GD,ICO,IMT,IPTC/NAA,MCIDAS,MIC,MPO,PCD,PIXAR,PSD,SGI,TGA,WAL,XPM
-            self.input_img = np.array(Image.open(str(self.img_path))).astype(float)
+            self.input_img = np.array(Image.open(img_path)).astype(float)
         except OSError as e:
             # unknown image
             # pop up dialog for binary data and open
             self.read_binary_img_with_dialog()
             pass
 
-        # 画像更新
-        self.update_img()
         pass
 
     def read_binary_img_with_dialog(self):
@@ -1159,7 +1258,8 @@ class QqriWindow(QtWidgets.QMainWindow):
                 self.add_ImgPrfSettingWidget_R()
 
         self.img_plot_list[widget_y][widget_x].img_path = img_path
-        self.img_plot_list[widget_y][widget_x].img_read_update()
+        self.img_plot_list[widget_y][widget_x].read_img()
+        self.img_plot_list[widget_y][widget_x].update_img()
         pass
 
     def overwrite_imageview_by_ndarray(self, img_array, widget_y=0, widget_x=0):
