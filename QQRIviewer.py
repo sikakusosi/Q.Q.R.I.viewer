@@ -138,6 +138,11 @@ class ch_swap_Dialog(QtWidgets.QDialog):
         self.setWindowTitle("Enter the path of the image to be swapped.")
         layout = QtWidgets.QFormLayout()
 
+        self.radio_btn_list = []
+        self.radio_btn_list.append(QtWidgets.QRadioButton("RGB"))
+        self.radio_btn_list.append(QtWidgets.QRadioButton("YUV422(8bit)"))
+        self.radio_btn_list[0].setChecked(True)
+
         self.le_path_0ch = QtWidgets.QLineEdit()
         self.le_path_0ch.setText('')
         self.le_path_1ch = QtWidgets.QLineEdit()
@@ -166,9 +171,14 @@ class ch_swap_Dialog(QtWidgets.QDialog):
 
     def getdata(self):
         if self.exec_() == QtWidgets.QDialog.Accepted:
-            return self.le_path_0ch.text(), self.le_path_1ch.text(), self.le_path_2ch.text()
+            img_format = ''
+            for i in np.arange(len(self.radio_btn_list)):
+                if self.radio_btn_list[i].isChecked():
+                    img_format = self.radio_btn_list[i].text()
+
+            return self.le_path_0ch.text(), self.le_path_1ch.text(), self.le_path_2ch.text(), img_format
         else:
-            return 'cancel','cancel','cancel'
+            return 'cancel','cancel','cancel','cancel'
 
 
 class analyze_window(object):
@@ -374,7 +384,7 @@ class ImageviewWidget(QtGui.QWidget):
     def ch_swap(self):
         while True:
             csd = ch_swap_Dialog()
-            path_0ch,path_1ch,path_2ch = csd.getdata()
+            path_0ch,path_1ch,path_2ch,img_format = csd.getdata()
             if path_0ch=='cancel':
                 print('cancel')
                 break
@@ -410,10 +420,29 @@ class ImageviewWidget(QtGui.QWidget):
                             break
 
                     if np.shape(temp_img_0ch)==np.shape(temp_img_1ch) and np.shape(temp_img_1ch)==np.shape(temp_img_2ch):
-                        self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
-                        self.input_img[:,:,0] = temp_img_0ch
-                        self.input_img[:,:,1] = temp_img_1ch
-                        self.input_img[:,:,2] = temp_img_2ch
+                        if img_format=='YUV422(8bit)':
+                            temp_img_cb = temp_img_1ch.copy()
+                            temp_img_cb[:,1::2] = temp_img_1ch[:,0::2]
+                            temp_img_cb = temp_img_cb - 128
+                            temp_img_cr = temp_img_1ch.copy()
+                            temp_img_cr[:,0::2] = temp_img_1ch[:,1::2]
+                            temp_img_cr = temp_img_cr - 128
+
+                            temp_img_r = temp_img_0ch+temp_img_cr*1.13983
+                            temp_img_g = temp_img_0ch+temp_img_cb*(-0.39465)+temp_img_cr*(-0.58060)
+                            temp_img_b = temp_img_0ch+temp_img_cb*2.03211
+
+                            self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
+                            self.input_img[:,:,0] = temp_img_r
+                            self.input_img[:,:,1] = temp_img_g
+                            self.input_img[:,:,2] = temp_img_b
+                        elif img_format=='RGB':
+                            self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
+                            self.input_img[:,:,0] = temp_img_0ch
+                            self.input_img[:,:,1] = temp_img_1ch
+                            self.input_img[:,:,2] = temp_img_2ch
+                        #end
+                        
                         self.update_img()
                         break
                     else:
