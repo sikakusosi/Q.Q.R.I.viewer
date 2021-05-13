@@ -141,7 +141,11 @@ class ch_swap_Dialog(QtWidgets.QDialog):
         self.radio_btn_list = []
         self.radio_btn_list.append(QtWidgets.QRadioButton("RGB"))
         self.radio_btn_list.append(QtWidgets.QRadioButton("YUV422(8bit)"))
+        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.601"))
+        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.709"))
         self.radio_btn_list[0].setChecked(True)
+        for i in np.arange(len(self.radio_btn_list)):
+            layout.addRow(self.radio_btn_list[i])
 
         self.le_path_0ch = QtWidgets.QLineEdit()
         self.le_path_0ch.setText('')
@@ -420,27 +424,53 @@ class ImageviewWidget(QtGui.QWidget):
                             break
 
                     if np.shape(temp_img_0ch)==np.shape(temp_img_1ch) and np.shape(temp_img_1ch)==np.shape(temp_img_2ch):
-                        if img_format=='YUV422(8bit)':
+                        if img_format=='RGB':
+                            self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
+                            self.input_img[:,:,0] = temp_img_0ch
+                            self.input_img[:,:,1] = temp_img_1ch
+                            self.input_img[:,:,2] = temp_img_2ch
+                        elif img_format=='YUV422(8bit)':
                             temp_img_cb = temp_img_1ch.copy()
                             temp_img_cb[:,1::2] = temp_img_1ch[:,0::2]
                             temp_img_cb = temp_img_cb - 128
                             temp_img_cr = temp_img_1ch.copy()
                             temp_img_cr[:,0::2] = temp_img_1ch[:,1::2]
                             temp_img_cr = temp_img_cr - 128
-
                             temp_img_r = temp_img_0ch+temp_img_cr*1.13983
                             temp_img_g = temp_img_0ch+temp_img_cb*(-0.39465)+temp_img_cr*(-0.58060)
                             temp_img_b = temp_img_0ch+temp_img_cb*2.03211
-
                             self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
                             self.input_img[:,:,0] = temp_img_r
                             self.input_img[:,:,1] = temp_img_g
                             self.input_img[:,:,2] = temp_img_b
-                        elif img_format=='RGB':
+                        elif img_format=='ITU-R_BT.601(8bit)':
+                            temp_img_cb = temp_img_1ch.copy()
+                            temp_img_cb[:,1::2] = temp_img_1ch[:,0::2]
+                            temp_img_cb = temp_img_cb - 128
+                            temp_img_cr = temp_img_1ch.copy()
+                            temp_img_cr[:,0::2] = temp_img_1ch[:,1::2]
+                            temp_img_cr = temp_img_cr - 128
+                            temp_img_r = temp_img_0ch+temp_img_cr*1.402
+                            temp_img_g = temp_img_0ch+temp_img_cb*(-0.344136)+temp_img_cr*(-0.714136)
+                            temp_img_b = temp_img_0ch+temp_img_cb*1.772
                             self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
-                            self.input_img[:,:,0] = temp_img_0ch
-                            self.input_img[:,:,1] = temp_img_1ch
-                            self.input_img[:,:,2] = temp_img_2ch
+                            self.input_img[:,:,0] = temp_img_r
+                            self.input_img[:,:,1] = temp_img_g
+                            self.input_img[:,:,2] = temp_img_b
+                        elif img_format=='ITU-R_BT.709(8bit)':
+                            temp_img_cb = temp_img_1ch.copy()
+                            temp_img_cb[:,1::2] = temp_img_1ch[:,0::2]
+                            temp_img_cb = temp_img_cb - 128
+                            temp_img_cr = temp_img_1ch.copy()
+                            temp_img_cr[:,0::2] = temp_img_1ch[:,1::2]
+                            temp_img_cr = temp_img_cr - 128
+                            temp_img_r = temp_img_0ch+temp_img_cr*1.5748
+                            temp_img_g = temp_img_0ch+temp_img_cb*(-0.187324)+temp_img_cr*(-0.468124)
+                            temp_img_b = temp_img_0ch+temp_img_cb*1.8556
+                            self.input_img = np.zeros((np.shape(temp_img_0ch)[0],np.shape(temp_img_0ch)[1],3))
+                            self.input_img[:,:,0] = temp_img_r
+                            self.input_img[:,:,1] = temp_img_g
+                            self.input_img[:,:,2] = temp_img_b
                         #end
                         
                         self.update_img()
