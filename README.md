@@ -2,6 +2,20 @@
 ![qqri_icon1](https://user-images.githubusercontent.com/47070478/117133652-7ceab180-addf-11eb-8492-e6a4789c37f1.png)  
 日本語のreadmeは下にあります。  
 
+For those who have difficulty installing Python or its libraries, we have prepared an environment for distribution using "embeddable python". (windows 64bit only)  
+The download link is below.  
+Unzip the python-3.9.5-embed-amd64_QQRIviewer.zip file and change directory at the command prompt.  
+You can then use the Q.Q.R.I.viewer by typing "python QQRIviewer_use_sample.py" at the command prompt.  
+  
+Pythonもしくはライブラリのインストールが困難な方のために、「embeddable python」を使用した配布用環境を用意してあります。(windows 64bitのみ)  
+ダウンロードリンクは下記です。  
+python-3.9.5-embed-amd64_QQRIviewer.zipファイルを解凍し、コマンドプロンプト上でそのディレクトリに移動してください。  
+その状態でコマンドプロンプトで「python QQRIviewer_use_sample.py」とタイプすれば、Q.Q.R.I.viewerを使用することができます。  
+  
+Download：https://drive.google.com/file/d/17GcbxSek_2uMMDq_nCcpE6NeqJzOPWFR/view?usp=sharing
+
+
+
 # Q.Q.R.I.viewer  
 Q.Q.R.I.viewer is an open source image viewing and image analysis program implemented using Python 3 (PyQt5).  
 We created it because we wanted an image viewer with quick response, direct data transfer from Python, and image analysis capability.  
