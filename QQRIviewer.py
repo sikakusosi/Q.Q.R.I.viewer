@@ -134,6 +134,7 @@ class ch_swap_Dialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         self.ok = 0
         super(ch_swap_Dialog, self).__init__(parent)
+        self.setAcceptDrops(True)
 
         self.setWindowTitle("Enter the path of the image to be swapped.")
         layout = QtWidgets.QFormLayout()
@@ -141,8 +142,8 @@ class ch_swap_Dialog(QtWidgets.QDialog):
         self.radio_btn_list = []
         self.radio_btn_list.append(QtWidgets.QRadioButton("RGB"))
         self.radio_btn_list.append(QtWidgets.QRadioButton("YUV422(8bit)"))
-        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.601"))
-        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.709"))
+        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.601(8bit)"))
+        self.radio_btn_list.append(QtWidgets.QRadioButton("ITU-R_BT.709(8bit)"))
         self.radio_btn_list[0].setChecked(True)
         for i in np.arange(len(self.radio_btn_list)):
             layout.addRow(self.radio_btn_list[i])
@@ -183,6 +184,16 @@ class ch_swap_Dialog(QtWidgets.QDialog):
             return self.le_path_0ch.text(), self.le_path_1ch.text(), self.le_path_2ch.text(), img_format
         else:
             return 'cancel','cancel','cancel','cancel'
+
+    def dragEnterEvent(self, event):
+        event.accept()
+    def dragMoveEvent(self, event):
+        pass
+    def dropEvent(self, event):
+        event.accept()
+        event.acceptProposedAction()
+        print(self.img_path)
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class analyze_window(object):
@@ -305,7 +316,6 @@ class ImageviewWidget(QtGui.QWidget):
         self.yprf_p.setMouseEnabled(y=False)
 
 
-
         #######################################################################
         #             Setting Area(Hist & Input-number) Define
         #######################################################################
@@ -316,18 +326,44 @@ class ImageviewWidget(QtGui.QWidget):
         self.setting_widget.setLayout(self.setting_layout)# グリッドレイアウトをこのsetting領域に登録
         self.layout.setRowStretch(1, 1)
 
+
+        self.img_view_box = QtWidgets.QGroupBox()
+        self.setting_layout.addWidget(self.img_view_box, 0, 0)
+        self.img_view_box_layout = QtGui.QGridLayout()
+        self.img_view_box.setLayout(self.img_view_box_layout)
+        self.img_view_box.setStyleSheet("background-color: #4AD8DA;")
+
+        # setting領域 : max,minの入力用
+        view_min_label = QtWidgets.QLabel()
+        view_min_label.setText("black level")
+        view_min_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.img_view_box_layout.addWidget(view_min_label, 0, 0,1,1)
+        self.view_min_text = QtWidgets.QLineEdit()
+        self.img_view_box_layout.addWidget(self.view_min_text, 0, 1, 1,1)
+
+        view_max_label = QtWidgets.QLabel()
+        view_max_label.setText("white level")
+        view_max_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.img_view_box_layout.addWidget(view_max_label, 0, 2,1,1)
+        self.view_max_text = QtWidgets.QLineEdit()
+        self.img_view_box_layout.addWidget(self.view_max_text, 0, 3, 1,1)
+
+        hist_step_label = QtWidgets.QLabel()
+        hist_step_label.setText("hist step")
+        hist_step_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.img_view_box_layout.addWidget(hist_step_label, 1, 0,1,1)
+        self.hist_step_text = QtWidgets.QLineEdit()
+        self.img_view_box_layout.addWidget(self.hist_step_text, 1, 1, 1,1)
+        self.hist_step_text.setText('10')
+
         # hist表示
         self.hist_widget = pg.MultiPlotWidget()
-        self.setting_layout.addWidget(self.hist_widget, 0, 0, 1,10)
-        self.img_hist = self.hist_widget.addPlot(0,0)
+        self.setting_layout.addWidget(self.hist_widget, 0, 1, 3,100)
+        self.img_hist = self.hist_widget.addPlot(0,0,2,1)
         self.img_hist.showGrid(x=True, y=True, alpha=0.8)
-
-        self.img_hist_plot0 = pg.PlotDataItem(np.array([0, 0, 0]), np.array([0, 0]),
-                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
-        self.img_hist_plot1 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),
-                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
-        self.img_hist_plot2 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),
-                                              stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,10,255),width=2))
+        self.img_hist_plot0 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
+        self.img_hist_plot1 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
+        self.img_hist_plot2 = pg.PlotDataItem(np.array([0,0,0]), np.array([0,0]),stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,10,255),width=2))
         self.img_hist.addItem(self.img_hist_plot0)
         self.img_hist.addItem(self.img_hist_plot1)
         self.img_hist.addItem(self.img_hist_plot2)
@@ -340,7 +376,8 @@ class ImageviewWidget(QtGui.QWidget):
         self.hist_region.lines[1].addMarker('|>', 0.5)
 
         # colorbar
-        self.colorbar_p = self.hist_widget.addPlot(1,0)
+        self.colorbar_p = self.hist_widget.addPlot(2,0,1,1)
+        self.colorbar_p.setMaximumHeight(14)
         self.colorbar = pg.ImageItem()
         self.colorbar.setOpts(axisOrder='row-major')
         self.colorbar_p.addItem(self.colorbar)
@@ -348,38 +385,60 @@ class ImageviewWidget(QtGui.QWidget):
         self.colorbar_p.hideAxis('left')
         self.colorbar_p.hideAxis('bottom')
 
-        # setting領域 : max,minの入力用
-        view_min_label = QtWidgets.QLabel()
-        view_min_label.setText("view-min")
-        view_min_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.setting_layout.addWidget(view_min_label, 1, 0)
-        self.view_min_text = QtWidgets.QLineEdit()
-        self.setting_layout.addWidget(self.view_min_text, 1, 1)
-
-        view_max_label = QtWidgets.QLabel()
-        view_max_label.setText("view-max")
-        view_max_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.setting_layout.addWidget(view_max_label, 1, 2)
-        self.view_max_text = QtWidgets.QLineEdit()
-        self.setting_layout.addWidget(self.view_max_text, 1, 3)
-
         # setting領域 ： colormap
+        colormap_label = QtWidgets.QLabel()
+        colormap_label.setText("colormap")
+        colormap_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.img_view_box_layout.addWidget(colormap_label, 1,2)
         self.colormap_name_list = ['gray', 'viridis', 'jet', 'spring', 'summer', 'autumn', 'winter', 'cool', 'hot', 'coolwarm',
                                    'gnuplot', 'gnuplot2', 'plasma', 'inferno', 'magma', 'cividis', 'hsv', 'ocean',
                                    'twilight', 'twilight_shifted', 'seismic', 'copper', 'Set1', 'Set2', 'Set3', 'tab10', 'tab20']
         self.colormap_cb = QtWidgets.QComboBox()
         self.colormap_cb.addItems(self.colormap_name_list)
-        self.setting_layout.addWidget(self.colormap_cb, 1, 4)
+        self.img_view_box_layout.addWidget(self.colormap_cb, 1, 3)
         self.colormap_cb.currentIndexChanged.connect(self.set_colormap)
 
+
+        # image proc
+        self.img_proc_box = QtWidgets.QGroupBox()
+        self.setting_layout.addWidget(self.img_proc_box, 2, 0)
+        self.img_proc_box_layout = QtGui.QGridLayout()
+        self.img_proc_box.setLayout(self.img_proc_box_layout)
+        self.img_proc_box.setStyleSheet("background-color: #2B8B96;")
+
+        img_proc_label = QtWidgets.QLabel()
+        img_proc_label.setText("img proc")
+        img_proc_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.img_proc_box_layout.addWidget(img_proc_label,0,0)
         # ch_swap
         self.ch_swap_btn = QtWidgets.QPushButton("ch swap", self)
-        self.setting_layout.addWidget(self.ch_swap_btn, 1, 5)
+        self.img_proc_box_layout.addWidget(self.ch_swap_btn,0,1)
+        # filter
+        self.Under_Construction1_btn = QtWidgets.QPushButton("---", self)
+        self.img_proc_box_layout.addWidget(self.Under_Construction1_btn, 0, 2)
+        # adv proc
+        self.Under_Construction2_btn = QtWidgets.QPushButton("---", self)
+        self.img_proc_box_layout.addWidget(self.Under_Construction2_btn, 0, 3)
+
+        img_proc_label.setStyleSheet("color: white")
+        self.ch_swap_btn.setStyleSheet("color: white")
+        self.Under_Construction1_btn.setStyleSheet("color: white")
+        self.Under_Construction2_btn.setStyleSheet("color: white")
+
+
+        # size adj
+        fm = self.view_min_text.fontMetrics()
+        m = self.view_min_text.textMargins()
+        c = self.view_min_text.contentsMargins()
+        max_width_base = 10*fm.width('x')+m.left()+m.right()+c.left()+c.right()
+        self.img_view_box.setMaximumWidth((max_width_base+8)*2+max_width_base*2+30)
+        self.img_proc_box.setMaximumWidth((max_width_base+8)*2+max_width_base*2+30)
 
         # setting領域コネクト
         self.hist_region.sigRegionChangeFinished.connect(self.update_img_level_by_region)
         self.view_min_text.editingFinished.connect(self.update_img_level_by_text)
         self.view_max_text.editingFinished.connect(self.update_img_level_by_text)
+        self.hist_step_text.editingFinished.connect(self.update_hist)
         self.ch_swap_btn.clicked.connect(self.ch_swap)
 
         pass
@@ -472,7 +531,7 @@ class ImageviewWidget(QtGui.QWidget):
                             self.input_img[:,:,1] = temp_img_g
                             self.input_img[:,:,2] = temp_img_b
                         #end
-                        
+
                         self.update_img()
                         break
                     else:
@@ -488,8 +547,26 @@ class ImageviewWidget(QtGui.QWidget):
     ####################################################################################################################
     #                                        Image reading by Drag&Drop
     ####################################################################################################################
-    def update_img(self):
+    def update_hist(self):
+        hist_step = float(self.hist_step_text.text())
+        if self.img_ch == 3:
+            y, x = np.histogram(self.img.image[:, :, 0], range=[self.img_min,self.img_max+1], bins=np.arange(self.img_min,self.img_max+hist_step+1,hist_step))
+            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
+            y, x = np.histogram(self.img.image[:, :, 1], range=[self.img_min,self.img_max+1], bins=np.arange(self.img_min,self.img_max+hist_step+1,hist_step))
+            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
+            y, x = np.histogram(self.img.image[:, :, 2], range=[self.img_min,self.img_max+1], bins=np.arange(self.img_min,self.img_max+hist_step+1,hist_step))
+            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(50,100,255),width=2))
 
+        elif self.img_ch == 1:
+            y, x = np.histogram(self.img.image, range=[self.img_min,self.img_max+1], bins=np.arange(self.img_min,self.img_max+hist_step+1,hist_step))
+            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
+
+        pass
+
+
+    def update_img(self):
         # image 更新
         self.img.setImage(self.input_img)
         self.img.setRect(pg.QtCore.QRectF(-0.5, -0.5, np.shape(self.input_img)[1], np.shape(self.input_img)[0]))
@@ -500,31 +577,17 @@ class ImageviewWidget(QtGui.QWidget):
         elif np.ndim(self.img.image) == 2:
             self.img_ch = 1
 
-
         #
         self.img_path_str = str(self.img.image)
         self.view_max_in = np.max(self.img.image)
+        self.img_max = self.view_max_in
         self.view_min_in = np.min(self.img.image)
+        self.img_min = self.view_min_in
         self.img_is_stored = True
 
         # hist更新
-        if self.img_ch == 3:
-            y, x = np.histogram(self.img.image[:, :, 0], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
-            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(255,10,10),width=2))
-
-            y, x = np.histogram(self.img.image[:, :, 1], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
-            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(10,255,10),width=2))
-
-            y, x = np.histogram(self.img.image[:, :, 2], range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
-            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color=(50,100,255),width=2))
-
-            #【追加】ーcolorbarがある場合、削除する関数実行
-        elif self.img_ch == 1:
-            y, x = np.histogram(self.img.image, range=[self.view_min_in,self.view_max_in+1], bins=np.arange(self.view_min_in,self.view_max_in+2))
-            self.img_hist_plot0.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
-            self.img_hist_plot1.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
-            self.img_hist_plot2.setData(x=x, y=y, stepMode=True, fillLevel=0, pen=pg.mkPen(color="w",width=2))
-            self.set_colormap()
+        self.update_hist()
+        self.set_colormap()
 
         self.input_img = None
         self.update_region()
@@ -819,11 +882,16 @@ class ImageviewWidget(QtGui.QWidget):
     #                       set colormap
     ####################################################################################################################
     def set_colormap(self):
-        colormap_N=256
-        cm = get_cmap(self.colormap_cb.currentText(),colormap_N)
-        self.colormap_lut = (np.array([cm(i) for i in range(colormap_N)]) * 255)
-        self.img.setLookupTable(self.colormap_lut)
-        self.colorbar.setImage(np.tile(self.colormap_lut[:,0:3],[100,1,1]).astype(np.uint8))
+        if self.img_ch == 1:
+            colormap_N=256
+            cm = get_cmap(self.colormap_cb.currentText(),colormap_N)
+            self.colormap_lut = (np.array([cm(i) for i in range(colormap_N)]) * 255)
+            self.img.setLookupTable(self.colormap_lut)
+            self.colorbar.setImage(np.tile(self.colormap_lut[:,0:3],[50,1,1]).astype(np.uint8))
+
+        elif self.img_ch == 3:
+            self.colorbar.setImage(np.zeros((256,1)).astype(np.uint8))
+
         pass
 
 
@@ -861,6 +929,8 @@ class QqriWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.centerWidget)
         self.layout = QtWidgets.QGridLayout()
         self.centerWidget.setLayout(self.layout)
+        self.layout.setVerticalSpacing(0)
+        self.layout.setHorizontalSpacing(0)
 
         #######################################################################
         #                   first ImgPrfSettingWidget define
@@ -1055,21 +1125,15 @@ class QqriWindow(QtWidgets.QMainWindow):
                 self.img_plot_list[y][x].img_roi[id].setPos(pos=pos,  finish=False)
                 self.img_plot_list[y][x].img_roi[id].setSize(size=size,  finish=False)
 
-                # analyze window関連
-                img_size = np.shape(self.img_plot_list[y][x].img.image)
-                pos_s = (np.clip((np.round(pos[0]+0.5)).astype(int),0, img_size[1]), np.clip((np.round(pos[1]+0.5)).astype(int),0, img_size[0]))
-                pos_e = (np.clip(pos_s[0]+size[0], 0, img_size[1]).astype(int), np.clip(pos_s[1]+size[1], 0, img_size[0]).astype(int))
-                self.img_plot_list[y][x].img_roi[id].roi_pos  = [[pos_s[1], pos_e[1]], [pos_s[0], pos_e[0]]]
-                self.img_plot_list[y][x].img_roi[id].roi_size = [pos_e[1]-pos_s[1], pos_e[0]-pos_s[0]]
-                self.img_plot_list[y][x].img_roi[id].roi_pix  = self.img_plot_list[y][x].img_roi[id].roi_size[0]*self.img_plot_list[y][x].img_roi[id].roi_size[1]
-                table_y_start = int(y*(self.imgprfwidget_xnum+1)+x)*len(self.img_plot_list[y][x].img_roi[id].roi_stats_func.keys())
-                table_x_start = int(2+id*3)
-
-                if (self.img_plot_list[y][x].img.image is None) or (self.img_plot_list[y][x].img_roi[id].roi_pix<=0):# 画像が入ってない場合
-                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot0.setData(np.array([0,1]), np.array([0]))
-                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot1.setData(np.array([0,1]), np.array([0]))
-                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot2.setData(np.array([0,1]), np.array([0]))
-                else:# 画像がある場合
+                if self.img_plot_list[y][x].img_is_stored:# 画像がある場合
+                    img_size = np.shape(self.img_plot_list[y][x].img.image)
+                    pos_s = (np.clip((np.round(pos[0]+0.5)).astype(int),0, img_size[1]), np.clip((np.round(pos[1]+0.5)).astype(int),0, img_size[0]))
+                    pos_e = (np.clip(pos_s[0]+size[0], 0, img_size[1]).astype(int), np.clip(pos_s[1]+size[1], 0, img_size[0]).astype(int))
+                    self.img_plot_list[y][x].img_roi[id].roi_pos  = [[pos_s[1], pos_e[1]], [pos_s[0], pos_e[0]]]
+                    self.img_plot_list[y][x].img_roi[id].roi_size = [pos_e[1]-pos_s[1], pos_e[0]-pos_s[0]]
+                    self.img_plot_list[y][x].img_roi[id].roi_pix  = self.img_plot_list[y][x].img_roi[id].roi_size[0]*self.img_plot_list[y][x].img_roi[id].roi_size[1]
+                    table_y_start = int(y*(self.imgprfwidget_xnum+1)+x)*len(self.img_plot_list[y][x].img_roi[id].roi_stats_func.keys())
+                    table_x_start = int(2+id*3)
                     if self.img_plot_list[y][x].img.channels() == 3: # 3ch
                         # 統計量
                         for i,k in enumerate(self.img_plot_list[y][x].img_roi[id].roi_stats_func.keys()):
@@ -1125,6 +1189,11 @@ class QqriWindow(QtWidgets.QMainWindow):
                         self.img_plot_list[y][x].img_roi[id].roi_hist_plot0.setData(hist_x,hist_y,pen=pg.mkPen(self.img_plot_list[y][x].img_roi[id].roi_color, width=2),fillLevel=0, brush=(160,160,160,128))
                         self.img_plot_list[y][x].img_roi[id].roi_hist_plot1.setData(hist_x,hist_y,pen=pg.mkPen(self.img_plot_list[y][x].img_roi[id].roi_color, width=2),fillLevel=0, brush=(160,160,160,128))
                         self.img_plot_list[y][x].img_roi[id].roi_hist_plot2.setData(hist_x,hist_y,pen=pg.mkPen(self.img_plot_list[y][x].img_roi[id].roi_color, width=2),fillLevel=0, brush=(160,160,160,128))
+
+                else:# 画像が入ってない場合
+                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot0.setData(np.array([0,1]), np.array([0]))
+                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot1.setData(np.array([0,1]), np.array([0]))
+                    self.img_plot_list[y][x].img_roi[id].roi_hist_plot2.setData(np.array([0,1]), np.array([0]))
         pass
 
     def add_imgROI_newImgPrfSettingWidget(self,new_y,new_x):
