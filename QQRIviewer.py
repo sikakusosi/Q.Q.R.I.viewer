@@ -8,6 +8,7 @@ from PyQt5 import QtWidgets
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 import numpy as np
+from scipy import ndimage
 from PIL import Image, ImageFile
 from matplotlib.pyplot import get_cmap
 import time
@@ -196,6 +197,445 @@ class ch_swap_Dialog(QtWidgets.QDialog):
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
+
+def obc_clamp_set_val(target_img, set_val):
+    return target_img-set_val
+
+def obc_clamp_OBarea_val(target_img,OBarea_start_y,OBarea_start_x,OBarea_end_y,OBarea_end_x):
+    return target_img-np.mean(target_img[OBarea_start_y:OBarea_end_y,OBarea_start_x:OBarea_end_x])
+
+def dpc_type1(target_img):
+    return target_img
+
+def raw_gaussian(target_img):
+    return target_img
+
+def raw_nlm(target_img):
+    return target_img
+
+def wb_set_value(target_img,r_gain,g_gain,b_gain,raw_mode):
+    out_img = np.zeros_like(target_img)
+    if raw_mode==0:#RGGB
+        out_img[0::2,0::2] = target_img[0::2,0::2]*r_gain
+        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
+        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
+        out_img[1::2,1::2] = target_img[1::2,1::2]*b_gain
+    elif raw_mode==1:#GRBG
+        out_img[0::2,0::2] = target_img[0::2,0::2]*g_gain
+        out_img[0::2,1::2] = target_img[0::2,1::2]*r_gain
+        out_img[1::2,0::2] = target_img[1::2,0::2]*b_gain
+        out_img[1::2,1::2] = target_img[1::2,1::2]*g_gain
+    elif raw_mode==2:#GBRG
+        out_img[0::2,0::2] = target_img[0::2,0::2]*g_gain
+        out_img[0::2,1::2] = target_img[0::2,1::2]*b_gain
+        out_img[1::2,0::2] = target_img[1::2,0::2]*r_gain
+        out_img[1::2,1::2] = target_img[1::2,1::2]*g_gain
+    elif raw_mode==3:#BGGR
+        out_img[0::2,0::2] = target_img[0::2,0::2]*b_gain
+        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
+        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
+        out_img[1::2,1::2] = target_img[1::2,1::2]*r_gain
+    else:
+        out_img[0::2,0::2] = target_img[0::2,0::2]*r_gain
+        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
+        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
+        out_img[1::2,1::2] = target_img[1::2,1::2]*b_gain
+    return out_img
+
+def wb_gray_world(target_img,raw_mode):
+    if raw_mode==0:#RGGB
+        g_mean = np.mean(np.array([target_img[0::2,1::2],target_img[1::2,0::2]]))
+        r_gain = g_mean/np.mean(target_img[0::2,0::2])
+        b_gain = g_mean/np.mean(target_img[1::2,1::2])
+    elif raw_mode==1:#GRBG
+        g_mean = np.mean(np.array([target_img[0::2,0::2],target_img[1::2,1::2]]))
+        r_gain = g_mean/np.mean(target_img[0::2,1::2])
+        b_gain = g_mean/np.mean(target_img[1::2,0::2])
+    elif raw_mode==2:#GBRG
+        g_mean = np.mean(np.array([target_img[0::2,0::2],target_img[1::2,1::2]]))
+        r_gain = g_mean/np.mean(target_img[1::2,0::2])
+        b_gain = g_mean/np.mean(target_img[0::2,1::2])
+    elif raw_mode==3:#BGGR
+        g_mean = np.mean(np.array([target_img[0::2,1::2],target_img[1::2,0::2]]))
+        r_gain = g_mean/np.mean(target_img[1::2,1::2])
+        b_gain = g_mean/np.mean(target_img[0::2,0::2])
+    else:
+        g_mean = np.mean(np.array([target_img[0::2,1::2],target_img[1::2,0::2]]))
+        r_gain = g_mean/np.mean(target_img[0::2,0::2])
+        b_gain = g_mean/np.mean(target_img[1::2,1::2])
+    return wb_set_value(target_img,r_gain=r_gain,g_gain=1,b_gain=b_gain,raw_mode=raw_mode)
+
+def demosaic_through(target_img):
+    return np.tile(target_img,(1,1,3))
+
+def demosaic_121(target_img,raw_mode):
+    """
+    Low quality demosaic.
+    R and B are just interpolated with 121 filter, G with 141 filter.
+    低クオリティのデモザイク。
+    R,Bは121フィルタ、Gは141フィルタで補間してるだけ。
+    :param target_img:  bayer
+    :return:            RGB
+    """
+    fil_RB = np.array([[1, 2, 1],
+                       [2, 4, 2],
+                       [1, 2, 1]]) / 4
+    fil_G = np.array([[0, 1, 0],
+                      [1, 4, 1],
+                      [0, 1, 0]]) / 4
+
+    target_rawR = np.zeros_like(target_img)
+    target_rawB = np.zeros_like(target_img)
+    target_rawG = np.zeros_like(target_img)
+    out_img = np.zeros((np.shape(target_img)[0], np.shape(target_img)[1], 3))
+
+    if raw_mode==0:#RGGB
+        target_rawR[0::2, 0::2] = target_img[0::2,0::2].copy()
+        target_rawG[1::2, 1::2] = target_img[0::2,1::2].copy()
+        target_rawG[0::2, 1::2] = target_img[1::2,0::2].copy()
+        target_rawB[1::2, 0::2] = target_img[1::2,1::2].copy()
+    elif raw_mode==1:#GRBG
+        target_rawG[0::2,0::2] = target_img[0::2,0::2].copy()
+        target_rawR[0::2,1::2] = target_img[0::2,1::2].copy()
+        target_rawB[1::2,0::2] = target_img[1::2,0::2].copy()
+        target_rawG[1::2,1::2] = target_img[1::2,1::2].copy()
+    elif raw_mode==2:#GBRG
+        target_rawG[0::2,0::2] = target_img[0::2,0::2].copy()
+        target_rawB[0::2,1::2] = target_img[0::2,1::2].copy()
+        target_rawR[1::2,0::2] = target_img[1::2,0::2].copy()
+        target_rawG[1::2,1::2] = target_img[1::2,1::2].copy()
+    elif raw_mode==3:#BGGR
+        target_rawB[0::2,0::2] = target_img[0::2,0::2].copy()
+        target_rawG[0::2,1::2] = target_img[0::2,1::2].copy()
+        target_rawG[1::2,0::2] = target_img[1::2,0::2].copy()
+        target_rawR[1::2,1::2] = target_img[1::2,1::2].copy()
+    else:
+        target_rawR[0::2,0::2] = target_img[0::2,0::2].copy()
+        target_rawG[0::2,1::2] = target_img[0::2,1::2].copy()
+        target_rawG[1::2,0::2] = target_img[1::2,0::2].copy()
+        target_rawB[1::2,1::2] = target_img[1::2,1::2].copy()
+
+    out_img[:, :, 0] = ndimage.convolve(target_rawR, fil_RB, mode='mirror')
+    out_img[:, :, 2] = ndimage.convolve(target_rawB, fil_RB, mode='mirror')
+    out_img[:, :, 1] = ndimage.convolve(target_rawG, fil_G, mode='mirror')
+
+    return out_img
+
+def demosaic_GBTF(target_img,raw_mode):
+    return target_img
+
+def matrix3x3_x_img3ch(target_img, input_mat):
+    out_img = np.zeros_like(target_img)
+    out_img[:,:,0] = target_img[:,:,0] * input_mat[0][0] + target_img[:, :, 1] * input_mat[0][1] + target_img[:, :, 2] * input_mat[0][2]
+    out_img[:,:,1] = target_img[:,:,0] * input_mat[1][0] + target_img[:, :, 1] * input_mat[1][1] + target_img[:, :, 2] * input_mat[1][2]
+    out_img[:,:,2] = target_img[:,:,0] * input_mat[2][0] + target_img[:, :, 1] * input_mat[2][1] + target_img[:, :, 2] * input_mat[2][2]
+    return out_img
+
+def gamma_set_value(target_img,gamma_val,input_min,input_max,output_min,output_max):
+    np.power(np.clip(target_img-input_min,0,input_max)/(input_max-input_min), 1/gamma_val)*(output_max-output_min)+output_min
+
+def ycconv_yuv(target_img):
+    return matrix3x3_x_img3ch(target_img,[[0.299,0.587,0.114],[-0.14713,-0.28886,0.436],[0.615,-0.51499,-0.10001]])
+def ycconv_BT601(target_img):
+    return matrix3x3_x_img3ch(target_img,[[0.299,0.587,0.114],[-0.168736,-0.331264,0.5],[0.5,-0.418688,-0.081312]])
+def ycconv_BT709(target_img):
+    return matrix3x3_x_img3ch(target_img,[[0.2126,0.7152,0.0722],[-0.114572,-0.385428,0.5],[0.5,-0.454153,-0.045847]])
+
+def ys_usm(target_img,gaussian_sigma,sharpness_gain):
+    return target_img+(target_img-ndimage.gaussian_filter(target_img, sigma=gaussian_sigma, mode='nearest'))*sharpness_gain
+
+def c_gaussian(target_img,sigma):
+    return target_img
+
+def c_nlm(target_img):
+    return target_img
+
+def goc_set_value(target_img,goc_0ch,goc_1ch,goc_2ch):
+    out_img = target_img
+    out_img[:,:,0] = np.clip(target_img[:,:,0]*goc_0ch[0]+goc_0ch[1],goc_0ch[2],goc_0ch[3])
+    out_img[:,:,1] = np.clip(target_img[:,:,1]*goc_1ch[0]+goc_1ch[1],goc_1ch[2],goc_1ch[3])
+    out_img[:,:,2] = np.clip(target_img[:,:,2]*goc_2ch[0]+goc_2ch[1],goc_2ch[2],goc_2ch[3])
+    return out_img
+
+
+
+class raw_proc_window(object):
+    def __init__(self):
+        # self.roi_hist_list = []
+        pass
+
+    def init_window(self,window):
+        window.setWindowTitle('Q.Q.R.I.viewer -raw processing window-')
+        self.centerWidget = QtWidgets.QWidget()
+        window.setCentralWidget(self.centerWidget)
+        self.layout = QtWidgets.QGridLayout()
+        self.centerWidget.setLayout(self.layout)
+
+        # raw type
+        self.raw_type_box = QtWidgets.QGroupBox("RAW type")
+        self.layout.addWidget(self.raw_type_box,0,0)
+        self.raw_type_box_layout = QtGui.QGridLayout()
+        self.raw_type_box.setLayout(self.raw_type_box_layout)
+
+        self.raw_type_list = [QtWidgets.QRadioButton("RG\nGB"),
+                              QtWidgets.QRadioButton("GR\nBG"),
+                              QtWidgets.QRadioButton("GB\nRG"),
+                              QtWidgets.QRadioButton("BG\nGR"),
+                              QtWidgets.QRadioButton("WW\nWW"),]
+        for i,rtl in enumerate(self.raw_type_list):
+            self.raw_type_box_layout.addWidget(rtl,0,i)
+        self.raw_type_list[0].setChecked(True)
+
+        # # pseudo color
+        # self.pseudo_color_box = QtWidgets.QGroupBox("Pseudo Color")
+        # self.layout.addWidget(self.pseudo_color_box,1,0)
+        # self.pseudo_color_box.setCheckable(True)
+        # self.pseudo_color_box_layout = QtGui.QGridLayout()
+        # self.pseudo_color_box.setLayout(self.pseudo_color_box_layout)
+
+        # simple raw development
+        self.simple_dev_box = QtWidgets.QGroupBox("Simple RAW Development")
+        self.layout.addWidget(self.simple_dev_box,1,0)
+        self.simple_dev_box.setCheckable(True)
+        self.simple_dev_box.setChecked(False)
+        self.simple_dev_box_layout = QtGui.QGridLayout()
+        self.simple_dev_box.setLayout(self.simple_dev_box_layout)
+
+        # preview
+        self.preview_box = QtWidgets.QGroupBox("Preview")
+        self.layout.addWidget(self.preview_box,0,1,2,2)
+        self.preview_box_layout = QtGui.QGridLayout()
+        self.preview_box.setLayout(self.preview_box_layout)
+        self.preview_img_widget = pg.MultiPlotWidget()
+        self.preview_box_layout.addWidget(self.preview_img_widget )
+        self.preview_img_p = self.preview_img_widget.addPlot(row=0, col=0)
+        self.preview_img_p.invertY(True)
+        self.preview_img = pg.ImageItem()
+        self.preview_img.setOpts(axisOrder='row-major')
+        self.preview_img_p.addItem(self.preview_img)
+        self.preview_img_p.setAspectLocked()
+        self.preview_img_p.setMouseEnabled(x=False, y=False)
+
+
+        ############################################################################
+        ## simple raw development - Optical Black Clamp
+        self.obc_func = {"clamp-set value":obc_clamp_set_val,
+                         "clamp-OBarea mean value":obc_clamp_OBarea_val,}
+        self.obc_box,self.obc_box_layout,self.obc_list=self.box_init_in_simple_dev_box("Optical Black Clamp", 0, 0, self.obc_func)
+
+        ### simple raw development - Optical Black Clamp - clamp set value
+        self.obc_set_value_label = QtWidgets.QLabel("set value")
+        self.obc_set_value_lineedit = QtWidgets.QLineEdit("0")
+        self.obc_set_value_lineedit.setValidator(QtGui.QIntValidator())
+        self.obc_box_layout.addWidget(self.obc_set_value_label, 0, 1)
+        self.obc_box_layout.addWidget(self.obc_set_value_lineedit, 0, 2)
+
+        ### simple raw development - Optical Black Clamp - clamp OBarea value
+        self.obc_OBarea_value_label = [QtWidgets.QLabel("OBarea start y"),
+                                       QtWidgets.QLabel("OBarea start x"),
+                                       QtWidgets.QLabel("OBarea end y"),
+                                       QtWidgets.QLabel("OBarea end x")]
+        self.obc_OBarea_value_lineedit =  [QtWidgets.QLineEdit(),
+                                           QtWidgets.QLineEdit(),
+                                           QtWidgets.QLineEdit(),
+                                           QtWidgets.QLineEdit()]
+        for i in np.arange(0,4):
+            self.obc_box_layout.addWidget(self.obc_OBarea_value_label[i], 1, i * 2 + 1)
+            self.obc_box_layout.addWidget(self.obc_OBarea_value_lineedit[i], 1, i * 2 + 2)
+            self.obc_OBarea_value_lineedit[i].setValidator(QtGui.QIntValidator())
+
+        ############################################################################
+        ## simple raw development - Defective Pixel Correction
+        self.dpc_func = {"type1":dpc_type1,
+                         }
+        self.dpc_box,self.dpc_box_layout,self.dpc_list=self.box_init_in_simple_dev_box("Defective Pixel Correction", 1, 0, self.dpc_func)
+
+        ############################################################################
+        ## simple raw development - RAW Noise Reduction
+        self.rawnr_func = {"gaussian":raw_gaussian,
+                           "non-local means":raw_nlm}
+        self.rawnr_box,self.rawnr_box_layout,self.rawnr_list=self.box_init_in_simple_dev_box("Noise Reduction for RAW", 2, 0, self.rawnr_func)
+
+        ############################################################################
+        ## simple raw development - White Balance
+        self.wb_func = {"set value":wb_set_value,
+                        "gray-world":wb_gray_world,
+                        }
+        self.wb_box,self.wb_box_layout,self.wb_list=self.box_init_in_simple_dev_box("White Balance", 3, 0, self.wb_func)
+
+        ### simple raw development - White Balance - set value
+        self.wb_set_value_label = [QtWidgets.QLabel("R-gain"),
+                                   QtWidgets.QLabel("G-gain"),
+                                   QtWidgets.QLabel("B-gain"),]
+        self.wb_set_value_lineedit =  [QtWidgets.QLineEdit("1"),
+                                       QtWidgets.QLineEdit("1"),
+                                       QtWidgets.QLineEdit("1"),]
+        for i in np.arange(0,3):
+            self.wb_box_layout.addWidget(self.wb_set_value_label[i], 0, i * 2 + 1)
+            self.wb_box_layout.addWidget(self.wb_set_value_lineedit[i], 0, i * 2 + 2)
+            self.wb_set_value_lineedit[i].setValidator(QtGui.QIntValidator())
+
+        ############################################################################
+        ## simple raw development - Demosaic
+        self.demosaic_func = {"simple121":demosaic_121,
+                              "GBTF":demosaic_GBTF}
+        self.demosaic_box,self.demosaic_box_layout,self.demosaic_list=self.box_init_in_simple_dev_box("Demosaic", 4, 0, self.demosaic_func)
+
+        ############################################################################
+        ## simple raw development - color matrix
+        self.cm_func = {"set value":matrix3x3_x_img3ch,
+                        }
+        self.cm_box,self.cm_box_layout,self.cm_list=self.box_init_in_simple_dev_box("Color Matrix", 5, 0, self.cm_func)
+        self.cm_set_value_label1 = [QtWidgets.QLabel("R_out"),
+                                    QtWidgets.QLabel("G_out"),
+                                    QtWidgets.QLabel("B_out"),]
+        self.cm_set_value_label2 = [QtWidgets.QLabel("R_in"),
+                                    QtWidgets.QLabel("G_in"),
+                                    QtWidgets.QLabel("B_in"),]
+        self.cm_set_value_lineedit = [[QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],
+                                      [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],
+                                      [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],]
+        ### simple raw development - color matrix - set value
+        kakko1 = QtWidgets.QLabel("(")
+        kakko1.setStyleSheet("font: 80px")
+        kakko5 = QtWidgets.QLabel("(")
+        kakko5.setStyleSheet("font: 80px")
+        kakko10 = QtWidgets.QLabel("(")
+        kakko10.setStyleSheet("font: 80px")
+        self.cm_box_layout.addWidget(kakko1, 0, 1, 3, 1)
+        self.cm_box_layout.addWidget(kakko5, 0, 5, 3, 1)
+        self.cm_box_layout.addWidget(kakko10, 0, 10, 3, 1)
+        kakko3 = QtWidgets.QLabel(")")
+        kakko3.setStyleSheet("font: 80px")
+        kakko9 = QtWidgets.QLabel(")")
+        kakko9.setStyleSheet("font: 80px")
+        kakko12 = QtWidgets.QLabel(")")
+        kakko12.setStyleSheet("font: 80px")
+        self.cm_box_layout.addWidget(kakko3, 0, 3, 3, 1)
+        self.cm_box_layout.addWidget(kakko9, 0, 9, 3, 1)
+        self.cm_box_layout.addWidget(kakko12, 0, 12, 3, 1)
+
+        for y in np.arange(0,3):
+            self.cm_box_layout.addWidget(self.cm_set_value_label1[y], y, 2)
+            if y==1:
+                self.cm_box_layout.addWidget(QtWidgets.QLabel("="), y, 4)
+            else:
+                self.cm_box_layout.addWidget(QtWidgets.QLabel(" "), y, 4)
+            self.cm_box_layout.addWidget(self.cm_set_value_label2[y], y, 11)
+            for x in np.arange(0,3):
+                self.cm_box_layout.addWidget(self.cm_set_value_lineedit[y][x], y, x+6)
+                self.cm_set_value_lineedit[y][x].setValidator(QtGui.QIntValidator())
+
+        ############################################################################
+        ## simple raw development - Gamma
+        self.gamma_func = {"set value":gamma_set_value,
+                              }
+        self.gamma_box,self.gamma_box_layout,self.gamma_list=self.box_init_in_simple_dev_box("Gamma", 6, 0, self.gamma_func)
+        ## simple raw development - Gamma - set value
+        self.gamma_set_value_label = [QtWidgets.QLabel("Gamma value(1/??)"),
+                                      QtWidgets.QLabel("input min"),
+                                      QtWidgets.QLabel("input max"),
+                                      QtWidgets.QLabel("output min"),
+                                      QtWidgets.QLabel("output max"),]
+        self.gamma_set_value_lineedit = [QtWidgets.QLineEdit("2.1"),
+                                         QtWidgets.QLineEdit("0"),
+                                         QtWidgets.QLineEdit("16383"),
+                                         QtWidgets.QLineEdit("0"),
+                                         QtWidgets.QLineEdit("255"),]
+        for i in np.arange(0,5):
+            self.gamma_box_layout.addWidget(self.gamma_set_value_label[i], 0, i*2+1)
+            self.gamma_box_layout.addWidget(self.gamma_set_value_lineedit[i], 0, i*2+2)
+            self.gamma_set_value_lineedit[i].setValidator(QtGui.QIntValidator())
+
+        ############################################################################
+        ## simple raw development - YC conversion
+        self.ycconv_func = {"YUV":ycconv_yuv,
+                            "BT601":ycconv_BT601,
+                            "BT709":ycconv_BT709,}
+        self.ycconv_box,self.ycconv_box_layout,self.ycconv_list=self.box_init_in_simple_dev_box("YC conversion", 7, 0, self.ycconv_func)
+
+        ############################################################################
+        ## simple raw development - Y sharpness
+        self.ys_func = {"unsharp-mask":ys_usm,
+                        }
+        self.ys_box,self.ys_box_layout,self.ys_list=self.box_init_in_simple_dev_box("Y sharpness", 8, 0, self.ys_func)
+
+        ############################################################################
+        ## simple raw development - C Noise Reduction
+        self.cnr_func = {"gaussian":c_gaussian,
+                         "non-local means":c_nlm}
+        self.cnr_box,self.cnr_box_layout,self.cnr_list=self.box_init_in_simple_dev_box("C Noise Reduction", 9, 0, self.cnr_func)
+
+        ############################################################################
+        ## simple raw development - Gain Offset Clip
+        self.goc_func = {"set value":goc_set_value,
+                         }
+        self.goc_box,self.goc_box_layout,self.goc_list=self.box_init_in_simple_dev_box("Gain Offset Clip", 10, 0, self.goc_func)
+
+        ### simple raw development - White Balance - set value
+        self.goc_set_value_label = [[QtWidgets.QLabel("0ch(Y or R)-Gain" ),QtWidgets.QLabel("0ch(Y or R)-Offset" ),QtWidgets.QLabel("0ch(Y or R)-Clip min" ),QtWidgets.QLabel("0ch(Y or R)-Clip max" )],
+                                    [QtWidgets.QLabel("1ch(Cb or G)-Gain"),QtWidgets.QLabel("1ch(Cb or G)-Offset"),QtWidgets.QLabel("1ch(Cb or G)-Clip min"),QtWidgets.QLabel("1ch(Cb or G)-Clip max")],
+                                    [QtWidgets.QLabel("2ch(Cr or b)-Gain"),QtWidgets.QLabel("2ch(Cr or b)-Offset"),QtWidgets.QLabel("2ch(Cr or b)-Clip min"),QtWidgets.QLabel("2ch(Cr or b)-Clip max")]]
+        self.goc_set_value_lineedit =  [[QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")],
+                                        [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("128"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")],
+                                        [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("128"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")]]
+        for y in np.arange(0,3):
+            for x in np.arange(0,4):
+                self.goc_box_layout.addWidget(self.goc_set_value_label[y][x], y, x*2+1)
+                self.goc_box_layout.addWidget(self.goc_set_value_lineedit[y][x], y, x*2+2)
+                self.goc_set_value_lineedit[y][x].setValidator(QtGui.QIntValidator())
+
+        ############################################################################
+        ## simple raw development - Run Development
+        self.save_setting_btn = QtWidgets.QPushButton('Save Development Setting')
+        self.simple_dev_box_layout.addWidget(self.save_setting_btn,11,0)
+
+        self.load_setting_btn = QtWidgets.QPushButton('Load Development Setting')
+        self.simple_dev_box_layout.addWidget(self.load_setting_btn,11,1)
+        self.save_setting_btn.clicked.connect(self.save_setting)
+        self.load_setting_btn.clicked.connect(self.load_setting)
+
+        self.rd_btn = QtWidgets.QPushButton('Run Development')
+        self.simple_dev_box_layout.addWidget(self.rd_btn,11,5)
+        self.rd_btn.setStyleSheet("background-color: #4AD8DA;")
+
+        pass
+
+    def save_setting(self):
+        pass
+    def load_setting(self):
+        pass
+
+    def run_development(self):
+        pass
+
+    def box_init_in_simple_dev_box(self,box_title,box_y,box_x,proc_func):
+        proc_box = QtWidgets.QGroupBox(box_title)
+        self.simple_dev_box_layout.addWidget(proc_box,box_y,box_x,1,6)
+        proc_box.setCheckable(True)
+        proc_box_layout = QtGui.QGridLayout()
+        proc_box.setLayout(proc_box_layout)
+        proc_list = []
+        for i,key_name in enumerate(proc_func.keys()):
+            proc_list.append(QtWidgets.QRadioButton(key_name))
+            proc_box_layout.addWidget(proc_list[-1],i,0)
+        proc_list[0].setChecked(True)
+
+        return proc_box,proc_box_layout,proc_list
+
+    def set_img(self, raw_img):
+        height,width = np.shape(raw_img)
+        self.preview_img.setImage(raw_img[height//2-128:height//2+128,width//2-128:width//2+128])
+        pass
+
+    def connect_le(self,):
+        pass
+
+    def preview(self):
+        pass
+
+
+
 class analyze_window(object):
     def __init__(self):
         # self.roi_hist_list = []
@@ -230,6 +670,10 @@ class ImageviewWidget(QtGui.QWidget):
     def __init__(self, ImgPrfSettingWidget_pos=None):
 
         self.Widget_pos = None
+
+        self.img_ch = None
+        self.input_img = None
+
         self.img_roi = []
         self.img_roi_id = 0
         self.img_roi_bool = []
@@ -327,7 +771,7 @@ class ImageviewWidget(QtGui.QWidget):
         self.layout.setRowStretch(1, 1)
 
 
-        self.img_view_box = QtWidgets.QGroupBox()
+        self.img_view_box = QtWidgets.QGroupBox("image view control")
         self.setting_layout.addWidget(self.img_view_box, 0, 0)
         self.img_view_box_layout = QtGui.QGridLayout()
         self.img_view_box.setLayout(self.img_view_box_layout)
@@ -400,27 +844,28 @@ class ImageviewWidget(QtGui.QWidget):
 
 
         # image proc
-        self.img_proc_box = QtWidgets.QGroupBox()
+        self.img_proc_box = QtWidgets.QGroupBox("image edit")
         self.setting_layout.addWidget(self.img_proc_box, 2, 0)
         self.img_proc_box_layout = QtGui.QGridLayout()
         self.img_proc_box.setLayout(self.img_proc_box_layout)
         self.img_proc_box.setStyleSheet("background-color: #2B8B96;")
 
-        img_proc_label = QtWidgets.QLabel()
-        img_proc_label.setText("img proc")
-        img_proc_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.img_proc_box_layout.addWidget(img_proc_label,0,0)
+        # img_proc_label = QtWidgets.QLabel()
+        # img_proc_label.setText("img proc")
+        # img_proc_label.setAlignment(QtCore.Qt.AlignCenter)
+        # self.img_proc_box_layout.addWidget(img_proc_label,0,0)
         # ch_swap
         self.ch_swap_btn = QtWidgets.QPushButton("ch swap", self)
-        self.img_proc_box_layout.addWidget(self.ch_swap_btn,0,1)
-        # filter
+        self.img_proc_box_layout.addWidget(self.ch_swap_btn,0,0)
+        # 1
         self.Under_Construction1_btn = QtWidgets.QPushButton("---", self)
-        self.img_proc_box_layout.addWidget(self.Under_Construction1_btn, 0, 2)
-        # adv proc
+        self.img_proc_box_layout.addWidget(self.Under_Construction1_btn, 0, 1)
+        # 2
         self.Under_Construction2_btn = QtWidgets.QPushButton("---", self)
-        self.img_proc_box_layout.addWidget(self.Under_Construction2_btn, 0, 3)
+        self.img_proc_box_layout.addWidget(self.Under_Construction2_btn, 0, 2)
+        self.init_raw_proc_window()
 
-        img_proc_label.setStyleSheet("color: white")
+        # img_proc_label.setStyleSheet("color: white")
         self.ch_swap_btn.setStyleSheet("color: white")
         self.Under_Construction1_btn.setStyleSheet("color: white")
         self.Under_Construction2_btn.setStyleSheet("color: white")
@@ -433,6 +878,8 @@ class ImageviewWidget(QtGui.QWidget):
         max_width_base = 10*fm.width('x')+m.left()+m.right()+c.left()+c.right()
         self.img_view_box.setMaximumWidth((max_width_base+8)*2+max_width_base*2+30)
         self.img_proc_box.setMaximumWidth((max_width_base+8)*2+max_width_base*2+30)
+        self.img_view_box.setMaximumHeight(80)
+        self.img_proc_box.setMaximumHeight(60)
 
         # setting領域コネクト
         self.hist_region.sigRegionChangeFinished.connect(self.update_img_level_by_region)
@@ -440,9 +887,26 @@ class ImageviewWidget(QtGui.QWidget):
         self.view_max_text.editingFinished.connect(self.update_img_level_by_text)
         self.hist_step_text.editingFinished.connect(self.update_hist)
         self.ch_swap_btn.clicked.connect(self.ch_swap)
+        self.Under_Construction2_btn.clicked.connect(self.open_raw_proc_window)
 
         pass
 
+    def init_raw_proc_window(self):
+        self.raw_proc_window = QtWidgets.QMainWindow()
+        self.raw_proc_window_ui = raw_proc_window()
+        self.raw_proc_window_ui.init_window(self.raw_proc_window)
+        pass
+
+    def open_raw_proc_window(self):
+        if self.img_is_stored:
+            # prev_img = self.img.image[self.img.height()//2-128:self.img.height()//2+128,
+            #                           self.img.width()//2-128:self.img.width()//2+128]
+            prev_img = self.img.image
+        else:
+            prev_img = np.ones((256,256))*128
+        self.raw_proc_window_ui.set_img(prev_img)
+        self.raw_proc_window.show()
+        pass
 
     def ch_swap(self):
         while True:
@@ -571,7 +1035,7 @@ class ImageviewWidget(QtGui.QWidget):
         self.img.setImage(self.input_img)
         self.img.setRect(pg.QtCore.QRectF(-0.5, -0.5, np.shape(self.input_img)[1], np.shape(self.input_img)[0]))
         self.tmb_img.setImage(self.input_img)
-        self.img_ch = None
+
         if np.ndim(self.img.image) == 3 and np.shape(self.img.image)[2] == 3:
             self.img_ch = 3
         elif np.ndim(self.img.image) == 2:
