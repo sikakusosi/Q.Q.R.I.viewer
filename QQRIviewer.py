@@ -9,7 +9,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 import numpy as np
 from scipy import ndimage
-from PIL import Image, ImageFile
+from PIL import Image, ImageFile, ImageFilter
 from matplotlib.pyplot import get_cmap
 import time
 
@@ -198,51 +198,112 @@ class ch_swap_Dialog(QtWidgets.QDialog):
 
 
 
-def obc_clamp_set_val(target_img, set_val):
-    return target_img-set_val
+def obc_clamp_set_val(target_img, set_val,raw_mode):
+    return target_img-set_val[0]
 
-def obc_clamp_OBarea_val(target_img,OBarea_start_y,OBarea_start_x,OBarea_end_y,OBarea_end_x):
-    return target_img-np.mean(target_img[OBarea_start_y:OBarea_end_y,OBarea_start_x:OBarea_end_x])
+def obc_clamp_OBarea_val(target_img,OBarea_pos):
+    return target_img-np.mean(target_img[int(OBarea_pos[0]):int(OBarea_pos[2]),
+                                         int(OBarea_pos[1]):int(OBarea_pos[3])])
 
-def dpc_type1(target_img):
+def dpc_type1(target_img, dummy,raw_mode):
     return target_img
 
-def raw_gaussian(target_img):
-    return target_img
+
+def generate_gaussian_filter(shape,sigma):
+    """
+    フィルタの総和が1になる、任意矩形形状のガウシアンフィルタを返す
+    generate_gaussian_filter((5,5),0.5) = fspecial('gaussian',5,0.5)<Matlab func>
+    例外処理として、sigma=0の場合はshapeはそのまま、値は中心に1のフィルタを返す
+
+    :param shape: タプル、フィルタの(y_size, x_size)。奇数であること
+    :param sigma: ガウス関数のシグマ
+    :return: フィルタの総和が1になる、任意矩形形状のガウシアンフィルタ
+    """
+    shape = (int(shape[0]),int(shape[1]))
+    if sigma==0:
+        temp = np.zeros(shape)
+        temp[shape[0]//2,shape[1]//2] = 1
+        return temp
+
+    m,n = [(ss-1.0)/2.0 for ss in shape]
+    y,x = np.ogrid[-m:m+1,-n:n+1]
+    gf = np.exp( -(x*x + y*y) / (2.0*sigma*sigma) )
+    gf[ gf < np.finfo(gf.dtype).eps*gf.max() ] = 0
+    sum_gf = gf.sum()
+    if sum_gf != 0:
+        gf = gf/sum_gf
+    return gf
+
+def raw_gaussian(target_img,shape_sigma,raw_mode):
+    if np.mod(shape_sigma[0],2)==0 or np.mod(shape_sigma[1],2)==0:
+        print('warning! RawNR-gaussian : Please input odd number')
+        return target_img
+
+    shape_sigma = np.array(shape_sigma).astype(int)
+    gf = generate_gaussian_filter((shape_sigma[0],shape_sigma[1]),shape_sigma[2])
+    gf_rb = np.zeros((shape_sigma[0],shape_sigma[1]))
+    gf_g  = np.zeros((shape_sigma[0],shape_sigma[1]))
+    rb_y_start = 1*(np.mod(shape_sigma[0],4)-1)
+    rb_x_start = 1*(np.mod(shape_sigma[1],4)-1)
+    gf_rb[0::2,0::2] = gf[0::2,0::2]
+    gf_g[0::2,0::2] = gf[0::2,0::2]
+    gf_g[1::2,1::2] = gf[1::2,1::2]
+    gf_rb = gf_rb/np.sum(gf_rb)
+    gf_g = gf_g/np.sum(gf_g)
+
+    gf_img = ndimage.convolve(target_img,gf_rb,mode='mirror')
+    gf_img2 = ndimage.convolve(target_img,gf_g,mode='mirror')
+
+    if raw_mode==0:#RGGB
+        gf_img[0::2,1::2] = gf_img2[0::2,1::2]
+        gf_img[1::2,0::2] = gf_img2[1::2,0::2]
+    elif raw_mode==1:#GRBG
+        gf_img[0::2,0::2] = gf_img2[0::2,0::2]
+        gf_img[1::2,1::2] = gf_img2[1::2,1::2]
+    elif raw_mode==2:#GBRG
+        gf_img[0::2,0::2] = gf_img2[0::2,0::2]
+        gf_img[1::2,1::2] = gf_img2[1::2,1::2]
+    elif raw_mode==3:#BGGR
+        gf_img[0::2,1::2] = gf_img2[0::2,1::2]
+        gf_img[1::2,0::2] = gf_img2[1::2,0::2]
+    else:
+        gf_img = gf_img2
+
+    return gf_img
 
 def raw_nlm(target_img):
     return target_img
 
-def wb_set_value(target_img,r_gain,g_gain,b_gain,raw_mode):
+def wb_set_value(target_img,gain,raw_mode):
     out_img = np.zeros_like(target_img)
     if raw_mode==0:#RGGB
-        out_img[0::2,0::2] = target_img[0::2,0::2]*r_gain
-        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
-        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
-        out_img[1::2,1::2] = target_img[1::2,1::2]*b_gain
+        out_img[0::2,0::2] = target_img[0::2,0::2]*gain[0]
+        out_img[0::2,1::2] = target_img[0::2,1::2]*gain[1]
+        out_img[1::2,0::2] = target_img[1::2,0::2]*gain[1]
+        out_img[1::2,1::2] = target_img[1::2,1::2]*gain[2]
     elif raw_mode==1:#GRBG
-        out_img[0::2,0::2] = target_img[0::2,0::2]*g_gain
-        out_img[0::2,1::2] = target_img[0::2,1::2]*r_gain
-        out_img[1::2,0::2] = target_img[1::2,0::2]*b_gain
-        out_img[1::2,1::2] = target_img[1::2,1::2]*g_gain
+        out_img[0::2,0::2] = target_img[0::2,0::2]*gain[1]
+        out_img[0::2,1::2] = target_img[0::2,1::2]*gain[0]
+        out_img[1::2,0::2] = target_img[1::2,0::2]*gain[2]
+        out_img[1::2,1::2] = target_img[1::2,1::2]*gain[1]
     elif raw_mode==2:#GBRG
-        out_img[0::2,0::2] = target_img[0::2,0::2]*g_gain
-        out_img[0::2,1::2] = target_img[0::2,1::2]*b_gain
-        out_img[1::2,0::2] = target_img[1::2,0::2]*r_gain
-        out_img[1::2,1::2] = target_img[1::2,1::2]*g_gain
+        out_img[0::2,0::2] = target_img[0::2,0::2]*gain[1]
+        out_img[0::2,1::2] = target_img[0::2,1::2]*gain[2]
+        out_img[1::2,0::2] = target_img[1::2,0::2]*gain[0]
+        out_img[1::2,1::2] = target_img[1::2,1::2]*gain[1]
     elif raw_mode==3:#BGGR
-        out_img[0::2,0::2] = target_img[0::2,0::2]*b_gain
-        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
-        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
-        out_img[1::2,1::2] = target_img[1::2,1::2]*r_gain
+        out_img[0::2,0::2] = target_img[0::2,0::2]*gain[2]
+        out_img[0::2,1::2] = target_img[0::2,1::2]*gain[1]
+        out_img[1::2,0::2] = target_img[1::2,0::2]*gain[1]
+        out_img[1::2,1::2] = target_img[1::2,1::2]*gain[0]
     else:
-        out_img[0::2,0::2] = target_img[0::2,0::2]*r_gain
-        out_img[0::2,1::2] = target_img[0::2,1::2]*g_gain
-        out_img[1::2,0::2] = target_img[1::2,0::2]*g_gain
-        out_img[1::2,1::2] = target_img[1::2,1::2]*b_gain
+        out_img[0::2,0::2] = target_img[0::2,0::2]*gain[0]
+        out_img[0::2,1::2] = target_img[0::2,1::2]*gain[1]
+        out_img[1::2,0::2] = target_img[1::2,0::2]*gain[1]
+        out_img[1::2,1::2] = target_img[1::2,1::2]*gain[2]
     return out_img
 
-def wb_gray_world(target_img,raw_mode):
+def wb_gray_world(target_img,dummy,raw_mode):
     if raw_mode==0:#RGGB
         g_mean = np.mean(np.array([target_img[0::2,1::2],target_img[1::2,0::2]]))
         r_gain = g_mean/np.mean(target_img[0::2,0::2])
@@ -263,12 +324,13 @@ def wb_gray_world(target_img,raw_mode):
         g_mean = np.mean(np.array([target_img[0::2,1::2],target_img[1::2,0::2]]))
         r_gain = g_mean/np.mean(target_img[0::2,0::2])
         b_gain = g_mean/np.mean(target_img[1::2,1::2])
-    return wb_set_value(target_img,r_gain=r_gain,g_gain=1,b_gain=b_gain,raw_mode=raw_mode)
+    return wb_set_value(target_img,[r_gain,1,b_gain],raw_mode=raw_mode)
 
-def demosaic_through(target_img):
-    return np.tile(target_img,(1,1,3))
 
-def demosaic_121(target_img,raw_mode):
+def demosaic_through(target_img,dummy,raw_mode):
+    return np.tile(target_img[:,:,np.newaxis],(1,1,3))
+
+def demosaic_121(target_img,dummy,raw_mode):
     """
     Low quality demosaic.
     R and B are just interpolated with 121 filter, G with 141 filter.
@@ -291,9 +353,9 @@ def demosaic_121(target_img,raw_mode):
 
     if raw_mode==0:#RGGB
         target_rawR[0::2, 0::2] = target_img[0::2,0::2].copy()
-        target_rawG[1::2, 1::2] = target_img[0::2,1::2].copy()
-        target_rawG[0::2, 1::2] = target_img[1::2,0::2].copy()
-        target_rawB[1::2, 0::2] = target_img[1::2,1::2].copy()
+        target_rawG[0::2, 1::2] = target_img[0::2,1::2].copy()
+        target_rawG[1::2, 0::2] = target_img[1::2,0::2].copy()
+        target_rawB[1::2, 1::2] = target_img[1::2,1::2].copy()
     elif raw_mode==1:#GRBG
         target_rawG[0::2,0::2] = target_img[0::2,0::2].copy()
         target_rawR[0::2,1::2] = target_img[0::2,1::2].copy()
@@ -324,44 +386,71 @@ def demosaic_121(target_img,raw_mode):
 def demosaic_GBTF(target_img,raw_mode):
     return target_img
 
-def matrix3x3_x_img3ch(target_img, input_mat):
+def matrix3x3_x_img3ch(target_img, input_mat, raw_mode):
     out_img = np.zeros_like(target_img)
-    out_img[:,:,0] = target_img[:,:,0] * input_mat[0][0] + target_img[:, :, 1] * input_mat[0][1] + target_img[:, :, 2] * input_mat[0][2]
-    out_img[:,:,1] = target_img[:,:,0] * input_mat[1][0] + target_img[:, :, 1] * input_mat[1][1] + target_img[:, :, 2] * input_mat[1][2]
-    out_img[:,:,2] = target_img[:,:,0] * input_mat[2][0] + target_img[:, :, 1] * input_mat[2][1] + target_img[:, :, 2] * input_mat[2][2]
+    out_img[:,:,0] = target_img[:,:,0] * input_mat[0] + target_img[:, :, 1] * input_mat[1] + target_img[:, :, 2] * input_mat[2]
+    out_img[:,:,1] = target_img[:,:,0] * input_mat[3] + target_img[:, :, 1] * input_mat[4] + target_img[:, :, 2] * input_mat[5]
+    out_img[:,:,2] = target_img[:,:,0] * input_mat[6] + target_img[:, :, 1] * input_mat[7] + target_img[:, :, 2] * input_mat[8]
     return out_img
 
-def gamma_set_value(target_img,gamma_val,input_min,input_max,output_min,output_max):
-    np.power(np.clip(target_img-input_min,0,input_max)/(input_max-input_min), 1/gamma_val)*(output_max-output_min)+output_min
+def gamma_set_value(target_img, input_mat, raw_mode):
+    return np.power(np.clip(target_img-input_mat[1],0,input_mat[2])/(input_mat[2]-input_mat[1]), 1/input_mat[0])*(input_mat[4]-input_mat[3])+input_mat[3]
 
-def ycconv_yuv(target_img):
-    return matrix3x3_x_img3ch(target_img,[[0.299,0.587,0.114],[-0.14713,-0.28886,0.436],[0.615,-0.51499,-0.10001]])
-def ycconv_BT601(target_img):
-    return matrix3x3_x_img3ch(target_img,[[0.299,0.587,0.114],[-0.168736,-0.331264,0.5],[0.5,-0.418688,-0.081312]])
-def ycconv_BT709(target_img):
-    return matrix3x3_x_img3ch(target_img,[[0.2126,0.7152,0.0722],[-0.114572,-0.385428,0.5],[0.5,-0.454153,-0.045847]])
+def ycconv_yuv(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[0.299,0.587,0.114,-0.14713,-0.28886,0.436,0.615,-0.51499,-0.10001],None)
+def ycconv_BT601(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[0.299,0.587,0.114,-0.168736,-0.331264,0.5,0.5,-0.418688,-0.081312],None)
+def ycconv_BT709(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[0.2126,0.7152,0.0722,-0.114572,-0.385428,0.5,0.5,-0.454153,-0.045847],None)
 
-def ys_usm(target_img,gaussian_sigma,sharpness_gain):
-    return target_img+(target_img-ndimage.gaussian_filter(target_img, sigma=gaussian_sigma, mode='nearest'))*sharpness_gain
+def rgbconv_yuv(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[1,0,1.13983,1,-0.39465,-0.58060,1,2.03211,0],None)
+def rgbconv_BT601(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[1,0,1.402,1,-0.344136,-0.714136,1,1.772,0],None)
+def rgbconv_BT709(target_img,dummy,raw_mode):
+    return matrix3x3_x_img3ch(target_img,[1,0,1.5748,1,-0.187324,-0.468124,1,1.8556,0],None)
 
-def c_gaussian(target_img,sigma):
-    return target_img
+def ys_usm(target_img,shape_sigma_gain,raw_mode):
+    gf = generate_gaussian_filter((shape_sigma_gain[0],shape_sigma_gain[1]),shape_sigma_gain[2])
+    blur_img = ndimage.convolve(target_img[:,:,0],gf,mode='mirror')
+    out_img = target_img.copy()
+    out_img[:,:,0] = target_img[:,:,0] + (target_img[:,:,0]-blur_img)+shape_sigma_gain[3]
+    return out_img
+
+def c_gaussian(target_img,shape_sigma,raw_mode):
+    out_img = target_img.copy()
+    gf = generate_gaussian_filter((shape_sigma[0],shape_sigma[1]),shape_sigma[2])
+    out_img[:,:,1] = ndimage.convolve(target_img[:,:,1],gf,mode='mirror')
+    out_img[:,:,2] = ndimage.convolve(target_img[:,:,2],gf,mode='mirror')
+    return out_img
 
 def c_nlm(target_img):
     return target_img
 
-def goc_set_value(target_img,goc_0ch,goc_1ch,goc_2ch):
-    out_img = target_img
-    out_img[:,:,0] = np.clip(target_img[:,:,0]*goc_0ch[0]+goc_0ch[1],goc_0ch[2],goc_0ch[3])
-    out_img[:,:,1] = np.clip(target_img[:,:,1]*goc_1ch[0]+goc_1ch[1],goc_1ch[2],goc_1ch[3])
-    out_img[:,:,2] = np.clip(target_img[:,:,2]*goc_2ch[0]+goc_2ch[1],goc_2ch[2],goc_2ch[3])
+def goc_set_value(target_img,goc_param,raw_mode):
+    out_img = target_img.copy()
+    out_img[:,:,0] = np.clip(target_img[:,:,0]*goc_param[0]+goc_param[1],goc_param[2],goc_param[3])
+    out_img[:,:,1] = np.clip(target_img[:,:,1]*goc_param[4]+goc_param[5],goc_param[6],goc_param[7])
+    out_img[:,:,2] = np.clip(target_img[:,:,2]*goc_param[8]+goc_param[9],goc_param[10],goc_param[11])
     return out_img
 
+def through_img2img(target_img, dummy, raw_mode):
+    return target_img
 
+class development_module:
+    def __init__(self,func,label_list,label_pos,lineedit_list,lineedit_pos):
+        self.func = func
+        self.label_list = label_list
+        self.label_pos = label_pos
+        self.lineedit_list = lineedit_list
+        self.lineedit_pos = lineedit_pos
+        pass
 
 class raw_proc_window(object):
     def __init__(self):
-        # self.roi_hist_list = []
+        self.preview_img_before = None
+        self.preview_img_dict = {}
+        self.prev_img_key = ['first']
         pass
 
     def init_window(self,window):
@@ -417,222 +506,420 @@ class raw_proc_window(object):
         self.preview_img_p.setMouseEnabled(x=False, y=False)
 
 
+        self.module_dict = {}
+        self.module_tab_dict = {}
         ############################################################################
         ## simple raw development - Optical Black Clamp
-        self.obc_func = {"clamp-set value":obc_clamp_set_val,
-                         "clamp-OBarea mean value":obc_clamp_OBarea_val,}
-        self.obc_box,self.obc_box_layout,self.obc_list=self.box_init_in_simple_dev_box("Optical Black Clamp", 0, 0, self.obc_func)
+        self.obc_ui_dict = {'manual input':development_module(func=obc_clamp_set_val,
+                                                                       label_list=[QtWidgets.QLabel('Please set constant number')],
+                                                                       label_pos=[(0,0,1,1)],
+                                                                       lineedit_list=[QtWidgets.QLineEdit('0')],
+                                                                       lineedit_pos=[(0,1,1,1)]),
+                            'clamp OBarea mean':development_module(func=obc_clamp_OBarea_val,
+                                                                   label_list=[QtWidgets.QLabel('Please set OBarea pos'),
+                                                                               QtWidgets.QLabel('y start'),
+                                                                               QtWidgets.QLabel('x start'),
+                                                                               QtWidgets.QLabel('y end'),
+                                                                               QtWidgets.QLabel('x end')],
+                                                                   label_pos=[(0,0,1,1),
+                                                                              (0,1,1,1),
+                                                                              (0,3,1,1),
+                                                                              (0,5,1,1),
+                                                                              (0,7,1,1),],
+                                                                   lineedit_list=[QtWidgets.QLineEdit('0'),
+                                                                                  QtWidgets.QLineEdit('0'),
+                                                                                  QtWidgets.QLineEdit('0'),
+                                                                                  QtWidgets.QLineEdit('0')],
+                                                                   lineedit_pos=[(0,2,1,1),
+                                                                                 (0,4,1,1),
+                                                                                 (0,6,1,1),
+                                                                                 (0,8,1,1),])
+                            }
+        self.obc_tab = self.init_module_tab(module_key='Optical Black Clamp',
+                                            module_ui_dict=self.obc_ui_dict,
+                                            module_key_pos=(0,0,1,1),
+                                            module_tab_pos=(0,1,1,1))
 
-        ### simple raw development - Optical Black Clamp - clamp set value
-        self.obc_set_value_label = QtWidgets.QLabel("set value")
-        self.obc_set_value_lineedit = QtWidgets.QLineEdit("0")
-        self.obc_set_value_lineedit.setValidator(QtGui.QIntValidator())
-        self.obc_box_layout.addWidget(self.obc_set_value_label, 0, 1)
-        self.obc_box_layout.addWidget(self.obc_set_value_lineedit, 0, 2)
-
-        ### simple raw development - Optical Black Clamp - clamp OBarea value
-        self.obc_OBarea_value_label = [QtWidgets.QLabel("OBarea start y"),
-                                       QtWidgets.QLabel("OBarea start x"),
-                                       QtWidgets.QLabel("OBarea end y"),
-                                       QtWidgets.QLabel("OBarea end x")]
-        self.obc_OBarea_value_lineedit =  [QtWidgets.QLineEdit(),
-                                           QtWidgets.QLineEdit(),
-                                           QtWidgets.QLineEdit(),
-                                           QtWidgets.QLineEdit()]
-        for i in np.arange(0,4):
-            self.obc_box_layout.addWidget(self.obc_OBarea_value_label[i], 1, i * 2 + 1)
-            self.obc_box_layout.addWidget(self.obc_OBarea_value_lineedit[i], 1, i * 2 + 2)
-            self.obc_OBarea_value_lineedit[i].setValidator(QtGui.QIntValidator())
-
-        ############################################################################
         ## simple raw development - Defective Pixel Correction
-        self.dpc_func = {"type1":dpc_type1,
-                         }
-        self.dpc_box,self.dpc_box_layout,self.dpc_list=self.box_init_in_simple_dev_box("Defective Pixel Correction", 1, 0, self.dpc_func)
+        self.dpc_ui_dict = {'type1':development_module(func=dpc_type1,
+                                                       label_list=[],
+                                                       label_pos=[],
+                                                       lineedit_list=[],
+                                                       lineedit_pos=[]),
+                            'through':development_module(func=through_img2img,
+                                                         label_list=[],
+                                                         label_pos=[],
+                                                         lineedit_list=[],
+                                                         lineedit_pos=[]),
+                            }
+        self.dpc_tab = self.init_module_tab(module_key='Defective Pixel Correction',
+                                            module_ui_dict=self.dpc_ui_dict,
+                                            module_key_pos=(1,0,1,1),
+                                            module_tab_pos=(1,1,1,1))
 
-        ############################################################################
         ## simple raw development - RAW Noise Reduction
-        self.rawnr_func = {"gaussian":raw_gaussian,
-                           "non-local means":raw_nlm}
-        self.rawnr_box,self.rawnr_box_layout,self.rawnr_list=self.box_init_in_simple_dev_box("Noise Reduction for RAW", 2, 0, self.rawnr_func)
-
-        ############################################################################
-        ## simple raw development - White Balance
-        self.wb_func = {"set value":wb_set_value,
-                        "gray-world":wb_gray_world,
-                        }
-        self.wb_box,self.wb_box_layout,self.wb_list=self.box_init_in_simple_dev_box("White Balance", 3, 0, self.wb_func)
-
-        ### simple raw development - White Balance - set value
-        self.wb_set_value_label = [QtWidgets.QLabel("R-gain"),
-                                   QtWidgets.QLabel("G-gain"),
-                                   QtWidgets.QLabel("B-gain"),]
-        self.wb_set_value_lineedit =  [QtWidgets.QLineEdit("1"),
-                                       QtWidgets.QLineEdit("1"),
-                                       QtWidgets.QLineEdit("1"),]
-        for i in np.arange(0,3):
-            self.wb_box_layout.addWidget(self.wb_set_value_label[i], 0, i * 2 + 1)
-            self.wb_box_layout.addWidget(self.wb_set_value_lineedit[i], 0, i * 2 + 2)
-            self.wb_set_value_lineedit[i].setValidator(QtGui.QIntValidator())
-
-        ############################################################################
-        ## simple raw development - Demosaic
-        self.demosaic_func = {"simple121":demosaic_121,
-                              "GBTF":demosaic_GBTF}
-        self.demosaic_box,self.demosaic_box_layout,self.demosaic_list=self.box_init_in_simple_dev_box("Demosaic", 4, 0, self.demosaic_func)
-
-        ############################################################################
-        ## simple raw development - color matrix
-        self.cm_func = {"set value":matrix3x3_x_img3ch,
-                        }
-        self.cm_box,self.cm_box_layout,self.cm_list=self.box_init_in_simple_dev_box("Color Matrix", 5, 0, self.cm_func)
-        self.cm_set_value_label1 = [QtWidgets.QLabel("R_out"),
-                                    QtWidgets.QLabel("G_out"),
-                                    QtWidgets.QLabel("B_out"),]
-        self.cm_set_value_label2 = [QtWidgets.QLabel("R_in"),
-                                    QtWidgets.QLabel("G_in"),
-                                    QtWidgets.QLabel("B_in"),]
-        self.cm_set_value_lineedit = [[QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],
-                                      [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],
-                                      [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("1"),],]
-        ### simple raw development - color matrix - set value
-        kakko1 = QtWidgets.QLabel("(")
-        kakko1.setStyleSheet("font: 80px")
-        kakko5 = QtWidgets.QLabel("(")
-        kakko5.setStyleSheet("font: 80px")
-        kakko10 = QtWidgets.QLabel("(")
-        kakko10.setStyleSheet("font: 80px")
-        self.cm_box_layout.addWidget(kakko1, 0, 1, 3, 1)
-        self.cm_box_layout.addWidget(kakko5, 0, 5, 3, 1)
-        self.cm_box_layout.addWidget(kakko10, 0, 10, 3, 1)
-        kakko3 = QtWidgets.QLabel(")")
-        kakko3.setStyleSheet("font: 80px")
-        kakko9 = QtWidgets.QLabel(")")
-        kakko9.setStyleSheet("font: 80px")
-        kakko12 = QtWidgets.QLabel(")")
-        kakko12.setStyleSheet("font: 80px")
-        self.cm_box_layout.addWidget(kakko3, 0, 3, 3, 1)
-        self.cm_box_layout.addWidget(kakko9, 0, 9, 3, 1)
-        self.cm_box_layout.addWidget(kakko12, 0, 12, 3, 1)
-
-        for y in np.arange(0,3):
-            self.cm_box_layout.addWidget(self.cm_set_value_label1[y], y, 2)
-            if y==1:
-                self.cm_box_layout.addWidget(QtWidgets.QLabel("="), y, 4)
-            else:
-                self.cm_box_layout.addWidget(QtWidgets.QLabel(" "), y, 4)
-            self.cm_box_layout.addWidget(self.cm_set_value_label2[y], y, 11)
-            for x in np.arange(0,3):
-                self.cm_box_layout.addWidget(self.cm_set_value_lineedit[y][x], y, x+6)
-                self.cm_set_value_lineedit[y][x].setValidator(QtGui.QIntValidator())
-
-        ############################################################################
-        ## simple raw development - Gamma
-        self.gamma_func = {"set value":gamma_set_value,
+        self.rawnr_ui_dict = {'gaussian':development_module(func=raw_gaussian,
+                                                            label_list=[QtWidgets.QLabel('kernel y-size'),
+                                                                        QtWidgets.QLabel('kernel x-size'),
+                                                                        QtWidgets.QLabel('sigma'),],
+                                                            label_pos=[(0,0,1,1),
+                                                                       (0,2,1,1),
+                                                                       (0,4,1,1)],
+                                                            lineedit_list=[QtWidgets.QLineEdit('5'),
+                                                                           QtWidgets.QLineEdit('5'),
+                                                                           QtWidgets.QLineEdit('0'),],
+                                                            lineedit_pos=[(0,1,1,1),
+                                                                          (0,3,1,1),
+                                                                          (0,5,1,1)]),
+                              'through':development_module(func=through_img2img,
+                                                           label_list=[],
+                                                           label_pos=[],
+                                                           lineedit_list=[],
+                                                           lineedit_pos=[]),
                               }
-        self.gamma_box,self.gamma_box_layout,self.gamma_list=self.box_init_in_simple_dev_box("Gamma", 6, 0, self.gamma_func)
-        ## simple raw development - Gamma - set value
-        self.gamma_set_value_label = [QtWidgets.QLabel("Gamma value(1/??)"),
-                                      QtWidgets.QLabel("input min"),
-                                      QtWidgets.QLabel("input max"),
-                                      QtWidgets.QLabel("output min"),
-                                      QtWidgets.QLabel("output max"),]
-        self.gamma_set_value_lineedit = [QtWidgets.QLineEdit("2.1"),
-                                         QtWidgets.QLineEdit("0"),
-                                         QtWidgets.QLineEdit("16383"),
-                                         QtWidgets.QLineEdit("0"),
-                                         QtWidgets.QLineEdit("255"),]
-        for i in np.arange(0,5):
-            self.gamma_box_layout.addWidget(self.gamma_set_value_label[i], 0, i*2+1)
-            self.gamma_box_layout.addWidget(self.gamma_set_value_lineedit[i], 0, i*2+2)
-            self.gamma_set_value_lineedit[i].setValidator(QtGui.QIntValidator())
+        self.rawnr_tab = self.init_module_tab(module_key='RAW Noise Reduction',
+                                              module_ui_dict=self.rawnr_ui_dict,
+                                              module_key_pos=(2,0,1,1),
+                                              module_tab_pos=(2,1,1,1))
 
-        ############################################################################
+        ## simple raw development - White Balance
+        self.wb_ui_dict = {'manual input':development_module(func=wb_set_value,
+                                                            label_list=[QtWidgets.QLabel('R-Gain'),
+                                                                        QtWidgets.QLabel('G-Gain'),
+                                                                        QtWidgets.QLabel('B-Gain')],
+                                                            label_pos=[(0,0,1,1),(0,2,1,1),(0,4,1,1)],
+                                                            lineedit_list=[QtWidgets.QLineEdit('1'),QtWidgets.QLineEdit('1'),QtWidgets.QLineEdit('1')],
+                                                            lineedit_pos=[(0,1,1,1),(0,3,1,1),(0,5,1,1)]),
+                           'autoWB gray-world':development_module(func=wb_gray_world,
+                                                                  label_list=[],
+                                                                  label_pos=[],
+                                                                  lineedit_list=[],
+                                                                  lineedit_pos=[]),
+                           }
+        self.wb_tab = self.init_module_tab(module_key='White Balance',
+                                              module_ui_dict=self.wb_ui_dict,
+                                              module_key_pos=(3,0,1,1),
+                                              module_tab_pos=(3,1,1,1))
+
+        ## simple raw development - Demosaic
+        self.demosaic_ui_dict = {'demosaic-121':development_module(func=demosaic_121,
+                                                                   label_list=[],
+                                                                   label_pos=[],
+                                                                   lineedit_list=[],
+                                                                   lineedit_pos=[]),
+                                 'through':development_module(func=demosaic_through,
+                                                              label_list=[],
+                                                              label_pos=[],
+                                                              lineedit_list=[],
+                                                              lineedit_pos=[]),
+                                }
+        self.demosaic_tab = self.init_module_tab(module_key='Demosaic',
+                                                 module_ui_dict=self.demosaic_ui_dict,
+                                                 module_key_pos=(4,0,1,1),
+                                                 module_tab_pos=(4,1,1,1))
+
+        ## simple raw development - color matrix
+        self.cm_ui_dict = {'manual input':development_module(func=matrix3x3_x_img3ch,
+                                                             label_list=[QtWidgets.QLabel("  R_out      "),
+                                                                         QtWidgets.QLabel("( G_out ) = ("),
+                                                                         QtWidgets.QLabel("  B_out      "),
+                                                                         QtWidgets.QLabel("    R_in  "),
+                                                                         QtWidgets.QLabel(") ( G_in )"),
+                                                                         QtWidgets.QLabel("    B_in  "),],
+                                                             label_pos=[(0,0,1,1),# QtWidgets.QLabel("R_out"),
+                                                                        (1,0,1,1),# QtWidgets.QLabel("( G_out"),
+                                                                        (2,0,1,1),# QtWidgets.QLabel("B_out"),
+                                                                        (0,4,1,1),# QtWidgets.QLabel("R_in"),
+                                                                        (1,4,1,1),# QtWidgets.QLabel("G_in )"),
+                                                                        (2,4,1,1),# QtWidgets.QLabel("B_in"),
+                                                                        ],
+                                                             lineedit_list=[QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("0"),
+                                                                            QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("0"),
+                                                                            QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("1"),],
+                                                             lineedit_pos=[(0,1,1,1),(0,2,1,1),(0,3,1,1),
+                                                                           (1,1,1,1),(1,2,1,1),(1,3,1,1),
+                                                                           (2,1,1,1),(2,2,1,1),(2,3,1,1)]),
+                           }
+        self.cm_tab = self.init_module_tab(module_key='Color Matrix',
+                                           module_ui_dict=self.cm_ui_dict,
+                                           module_key_pos=(5,0,1,1),
+                                           module_tab_pos=(5,1,1,1))
+
+        ## simple raw development - Gamma
+        self.gamma_ui_dict = {'manual input':development_module(func=gamma_set_value,
+                                                                label_list=[QtWidgets.QLabel("Gamma value(1/??)"),
+                                                                            QtWidgets.QLabel("input min"),
+                                                                            QtWidgets.QLabel("input max"),
+                                                                            QtWidgets.QLabel("output min"),
+                                                                            QtWidgets.QLabel("output max")],
+                                                                label_pos=[(0,0,1,1),
+                                                                           (0,2,1,1),
+                                                                           (0,4,1,1),
+                                                                           (0,6,1,1),
+                                                                           (0,8,1,1),],
+                                                                lineedit_list=[QtWidgets.QLineEdit("2.1"),
+                                                                               QtWidgets.QLineEdit("0"),
+                                                                               QtWidgets.QLineEdit("16383"),
+                                                                               QtWidgets.QLineEdit("0"),
+                                                                               QtWidgets.QLineEdit("255")],
+                                                                lineedit_pos=[(0,1,1,1),
+                                                                              (0,3,1,1),
+                                                                              (0,5,1,1),
+                                                                              (0,7,1,1),
+                                                                              (0,9,1,1)]),
+                              'through':development_module(func=through_img2img,
+                                                           label_list=[],
+                                                           label_pos=[],
+                                                           lineedit_list=[],
+                                                           lineedit_pos=[]),
+                              }
+        self.gamma_tab = self.init_module_tab(module_key='Gamma',
+                                              module_ui_dict=self.gamma_ui_dict,
+                                              module_key_pos=(6,0,1,1),
+                                              module_tab_pos=(6,1,1,1))
+
         ## simple raw development - YC conversion
-        self.ycconv_func = {"YUV":ycconv_yuv,
-                            "BT601":ycconv_BT601,
-                            "BT709":ycconv_BT709,}
-        self.ycconv_box,self.ycconv_box_layout,self.ycconv_list=self.box_init_in_simple_dev_box("YC conversion", 7, 0, self.ycconv_func)
+        self.ycconv_ui_dict = {'YUV':development_module(func=ycconv_yuv,label_list=[],label_pos=[],lineedit_list=[],lineedit_pos=[]),
+                               'BT.601':development_module(func=ycconv_BT601,label_list=[],label_pos=[],lineedit_list=[],lineedit_pos=[]),
+                               'BT.709':development_module(func=ycconv_BT709,label_list=[],label_pos=[],lineedit_list=[],lineedit_pos=[]),
+                               }
+        self.ycconv_tab = self.init_module_tab(module_key='YC conversion',
+                                               module_ui_dict=self.ycconv_ui_dict,
+                                               module_key_pos=(7,0,1,1),
+                                               module_tab_pos=(7,1,1,1))
 
-        ############################################################################
         ## simple raw development - Y sharpness
-        self.ys_func = {"unsharp-mask":ys_usm,
-                        }
-        self.ys_box,self.ys_box_layout,self.ys_list=self.box_init_in_simple_dev_box("Y sharpness", 8, 0, self.ys_func)
+        self.ys_ui_dict = {'unsharp':development_module(func=ys_usm,
+                                                                label_list=[QtWidgets.QLabel("blur karnel y size"),
+                                                                            QtWidgets.QLabel("blur karnel x size"),
+                                                                            QtWidgets.QLabel("blur sigma"),
+                                                                            QtWidgets.QLabel("sharpness gain"),],
+                                                                label_pos=[(0,0,1,1),
+                                                                           (0,2,1,1),
+                                                                           (0,4,1,1),
+                                                                           (0,6,1,1),],
+                                                                lineedit_list=[QtWidgets.QLineEdit("5"),
+                                                                               QtWidgets.QLineEdit("5"),
+                                                                               QtWidgets.QLineEdit("0"),
+                                                                               QtWidgets.QLineEdit("1"),],
+                                                                lineedit_pos=[(0,1,1,1),
+                                                                              (0,3,1,1),
+                                                                              (0,5,1,1),
+                                                                              (0,7,1,1),]),
+                              'through':development_module(func=through_img2img,
+                                                           label_list=[],
+                                                           label_pos=[],
+                                                           lineedit_list=[],
+                                                           lineedit_pos=[]),
+                              }
+        self.ys_tab = self.init_module_tab(module_key='Y sharpness',
+                                              module_ui_dict=self.ys_ui_dict,
+                                              module_key_pos=(8,0,1,1),
+                                              module_tab_pos=(8,1,1,1))
 
-        ############################################################################
+
         ## simple raw development - C Noise Reduction
-        self.cnr_func = {"gaussian":c_gaussian,
-                         "non-local means":c_nlm}
-        self.cnr_box,self.cnr_box_layout,self.cnr_list=self.box_init_in_simple_dev_box("C Noise Reduction", 9, 0, self.cnr_func)
+        self.cnr_ui_dict = {'gaussian':development_module(func=c_gaussian,
+                                                          label_list=[QtWidgets.QLabel("karnel y size"),
+                                                                      QtWidgets.QLabel("karnel x size"),
+                                                                      QtWidgets.QLabel("sigma"),],
+                                                          label_pos=[(0,0,1,1),
+                                                                     (0,2,1,1),
+                                                                     (0,4,1,1),],
+                                                          lineedit_list=[QtWidgets.QLineEdit("5"),
+                                                                         QtWidgets.QLineEdit("5"),
+                                                                         QtWidgets.QLineEdit("0"),],
+                                                          lineedit_pos=[(0,1,1,1),
+                                                                        (0,3,1,1),
+                                                                        (0,5,1,1),]),
+                           }
+        self.cnr_tab = self.init_module_tab(module_key='C Noise Reduction',
+                                            module_ui_dict=self.cnr_ui_dict,
+                                            module_key_pos=(9,0,1,1),
+                                            module_tab_pos=(9,1,1,1))
 
-        ############################################################################
+        ## simple raw development - (for display) RGB conversion
+        self.rgbconv_ui_dict = {}
+        rgbconv_func_list = [rgbconv_yuv,rgbconv_BT601,rgbconv_BT709]
+        for i,k in enumerate(self.ycconv_ui_dict.keys()):
+            self.rgbconv_ui_dict[k] = development_module(func=rgbconv_func_list[i],label_list=[],label_pos=[],lineedit_list=[],lineedit_pos=[])
+
+        self.rgbconv_tab = self.init_module_tab(module_key='RGB conversion',
+                                                module_ui_dict=self.rgbconv_ui_dict,
+                                                module_key_pos=(10,0,1,1),
+                                                module_tab_pos=(10,1,1,1))
+
+        self.module_tab_dict['YC conversion'].currentChanged.connect(lambda: self.update_other_tab(['YC conversion','RGB conversion']))
+        self.module_tab_dict['RGB conversion'].currentChanged.connect(lambda: self.update_other_tab(['RGB conversion','YC conversion']))
+
         ## simple raw development - Gain Offset Clip
-        self.goc_func = {"set value":goc_set_value,
-                         }
-        self.goc_box,self.goc_box_layout,self.goc_list=self.box_init_in_simple_dev_box("Gain Offset Clip", 10, 0, self.goc_func)
+        self.goc_ui_dict = {'manual input':development_module(func=goc_set_value,
+                                                              label_list=[QtWidgets.QLabel("clip( 0ch * "),
+                                                                          QtWidgets.QLabel(" + "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" )"),
+                                                                          QtWidgets.QLabel("clip( 1ch * "),
+                                                                          QtWidgets.QLabel(" + "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" )"),
+                                                                          QtWidgets.QLabel("clip( 2ch * "),
+                                                                          QtWidgets.QLabel(" + "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" , "),
+                                                                          QtWidgets.QLabel(" )"),],
+                                                              label_pos=[(0,0,1,1),
+                                                                         (0,2,1,1),
+                                                                         (0,4,1,1),
+                                                                         (0,6,1,1),
+                                                                         (0,8,1,1),
+                                                                         (1,0,1,1),
+                                                                         (1,2,1,1),
+                                                                         (1,4,1,1),
+                                                                         (1,6,1,1),
+                                                                         (1,8,1,1),
+                                                                         (2,0,1,1),
+                                                                         (2,2,1,1),
+                                                                         (2,4,1,1),
+                                                                         (2,6,1,1),
+                                                                         (2,8,1,1),],
+                                                              lineedit_list=[QtWidgets.QLineEdit("1"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("999999"),
+                                                                             QtWidgets.QLineEdit("1"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("999999"),
+                                                                             QtWidgets.QLineEdit("1"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("0"),
+                                                                             QtWidgets.QLineEdit("999999"),],
+                                                              lineedit_pos=[(0,1,1,1),
+                                                                            (0,3,1,1),
+                                                                            (0,5,1,1),
+                                                                            (0,7,1,1),
+                                                                            (1,1,1,1),
+                                                                            (1,3,1,1),
+                                                                            (1,5,1,1),
+                                                                            (1,7,1,1),
+                                                                            (2,1,1,1),
+                                                                            (2,3,1,1),
+                                                                            (2,5,1,1),
+                                                                            (2,7,1,1),]),
+                            }
+        self.goc_tab = self.init_module_tab(module_key='Gain Offset Clip',
+                                            module_ui_dict=self.goc_ui_dict,
+                                            module_key_pos=(11,0,1,1),
+                                            module_tab_pos=(11,1,1,1))
 
-        ### simple raw development - White Balance - set value
-        self.goc_set_value_label = [[QtWidgets.QLabel("0ch(Y or R)-Gain" ),QtWidgets.QLabel("0ch(Y or R)-Offset" ),QtWidgets.QLabel("0ch(Y or R)-Clip min" ),QtWidgets.QLabel("0ch(Y or R)-Clip max" )],
-                                    [QtWidgets.QLabel("1ch(Cb or G)-Gain"),QtWidgets.QLabel("1ch(Cb or G)-Offset"),QtWidgets.QLabel("1ch(Cb or G)-Clip min"),QtWidgets.QLabel("1ch(Cb or G)-Clip max")],
-                                    [QtWidgets.QLabel("2ch(Cr or b)-Gain"),QtWidgets.QLabel("2ch(Cr or b)-Offset"),QtWidgets.QLabel("2ch(Cr or b)-Clip min"),QtWidgets.QLabel("2ch(Cr or b)-Clip max")]]
-        self.goc_set_value_lineedit =  [[QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")],
-                                        [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("128"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")],
-                                        [QtWidgets.QLineEdit("1"),QtWidgets.QLineEdit("128"),QtWidgets.QLineEdit("0"),QtWidgets.QLineEdit("255")]]
-        for y in np.arange(0,3):
-            for x in np.arange(0,4):
-                self.goc_box_layout.addWidget(self.goc_set_value_label[y][x], y, x*2+1)
-                self.goc_box_layout.addWidget(self.goc_set_value_lineedit[y][x], y, x*2+2)
-                self.goc_set_value_lineedit[y][x].setValidator(QtGui.QIntValidator())
+        ## simple raw development - run button
+        self.simple_dev_run_btn = QtWidgets.QPushButton('run')
+        self.layout.addWidget(self.simple_dev_run_btn,2,2)
 
-        ############################################################################
-        ## simple raw development - Run Development
-        self.save_setting_btn = QtWidgets.QPushButton('Save Development Setting')
-        self.simple_dev_box_layout.addWidget(self.save_setting_btn,11,0)
+        self.simple_dev_save_btn = QtWidgets.QPushButton('save setting')
+        self.layout.addWidget(self.simple_dev_save_btn,2,0)
 
-        self.load_setting_btn = QtWidgets.QPushButton('Load Development Setting')
-        self.simple_dev_box_layout.addWidget(self.load_setting_btn,11,1)
-        self.save_setting_btn.clicked.connect(self.save_setting)
-        self.load_setting_btn.clicked.connect(self.load_setting)
-
-        self.rd_btn = QtWidgets.QPushButton('Run Development')
-        self.simple_dev_box_layout.addWidget(self.rd_btn,11,5)
-        self.rd_btn.setStyleSheet("background-color: #4AD8DA;")
+        self.simple_dev_load_btn = QtWidgets.QPushButton('load setting')
+        self.layout.addWidget(self.simple_dev_load_btn,2,1)
 
         pass
+
+    def update_other_tab(self,module_key_list):
+        self.module_tab_dict[module_key_list[1]].setCurrentIndex(self.module_tab_dict[module_key_list[0]].currentIndex())
+        pass
+
+
+    def init_module_tab(self,module_key,module_ui_dict,module_key_pos,module_tab_pos):
+        self.module_dict[module_key] = module_ui_dict
+        module_tab = QtWidgets.QTabWidget() # 当該モジュールのタブ
+        module_tab_list = [] # 当該モジュールの個々のタブ
+        module_tab_layout_list = [] # tab内のレイアウト
+        for each_func_key in module_ui_dict.keys():
+            module_tab_list.append(QtWidgets.QWidget())
+            module_tab.addTab(module_tab_list[-1], each_func_key)
+            module_tab_layout_list.append(QtWidgets.QGridLayout())
+            module_tab_list[-1].setLayout(module_tab_layout_list[-1])
+            if len(module_ui_dict[each_func_key].label_list) != 0:
+                for i,la in enumerate(module_ui_dict[each_func_key].label_list):
+                    module_tab_layout_list[-1].addWidget(la,module_ui_dict[each_func_key].label_pos[i][0],module_ui_dict[each_func_key].label_pos[i][1],module_ui_dict[each_func_key].label_pos[i][2],module_ui_dict[each_func_key].label_pos[i][3])
+                    # la.setMaximumWidth(120)
+                    la.setAlignment(QtCore.Qt.AlignJustify)
+            if len(module_ui_dict[each_func_key].lineedit_list) != 0:
+                for i,le in enumerate(module_ui_dict[each_func_key].lineedit_list):
+                    module_tab_layout_list[-1].addWidget(le,module_ui_dict[each_func_key].lineedit_pos[i][0],module_ui_dict[each_func_key].lineedit_pos[i][1],module_ui_dict[each_func_key].lineedit_pos[i][2],module_ui_dict[each_func_key].lineedit_pos[i][3])
+                    le.editingFinished.connect(lambda: self.update_prev(module_key))
+                    le.setValidator(QtGui.QDoubleValidator())
+                    # le.setAlignment(QtCore.Qt.AlignJustify)
+                    # le.setMaxLength(60)
+                    # le.setMaximumWidth(60)
+                    # QtWidgets.QLineEdit.setSizePolicy(QtWidgets.QSizePolicy.Expanding)
+                    # le.setSizePolicy(QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Expanding)
+
+
+        temp = QtWidgets.QLabel(module_key)
+        self.simple_dev_box_layout.addWidget(temp,module_key_pos[0],module_key_pos[1],module_key_pos[2],module_key_pos[3])
+        temp.setStyleSheet("QLabel { color : #2B8B96; }")
+        temp.setFont(QtGui.QFont("Arial Font", 10, QtGui.QFont.Bold))
+
+        self.simple_dev_box_layout.addWidget(module_tab,module_tab_pos[0],module_tab_pos[1],module_tab_pos[2],module_tab_pos[3])
+        module_tab.currentChanged.connect(lambda: self.update_prev(module_key))
+
+        self.module_tab_dict[module_key] = module_tab
+        self.prev_img_key.append(module_key)
+        pass
+
+
+    def set_img(self, raw_img):
+        height,width = np.shape(raw_img)
+        temp_img = raw_img[height//2-128:height//2+128,width//2-128:width//2+128].astype(float)
+        # self.preview_img.setImage(temp_img)
+        self.preview_img_dict['first'] = temp_img.copy()
+        self.update_prev('first')
+        pass
+
+    def update_prev(self,module_key):
+        run_flag = False
+        prev_target_img = None
+        for i,k in enumerate(self.module_tab_dict.keys()):
+            if module_key==k:
+                run_flag = True
+                prev_target_img = self.preview_img_dict[self.prev_img_key[i]]
+            elif module_key=='first' and not(run_flag):
+                run_flag = True
+                prev_target_img = self.preview_img_dict['first']
+
+            if run_flag:
+                now_tab_name = self.module_tab_dict[k].tabText(self.module_tab_dict[k].currentIndex())
+                val_list = []
+                for i in range(len(self.module_dict[k][now_tab_name].lineedit_list)):
+                    val_list.append(float(self.module_dict[k][now_tab_name].lineedit_list[i].text()))
+
+                prev_target_img = self.module_dict[k][now_tab_name].func(prev_target_img,val_list,0).copy()
+                self.preview_img_dict[k] = prev_target_img.copy()
+
+        # now_tab_name = self.module_tab_dict['YC conversion'].tabText(self.module_tab_dict['YC conversion'].currentIndex())
+        # prev_target_img = self.rgbconv_ui_dict[now_tab_name].func(prev_target_img).copy()
+        self.preview_img.setImage(prev_target_img)
+        print(prev_target_img)
+        pass
+
 
     def save_setting(self):
         pass
     def load_setting(self):
         pass
 
-    def run_development(self):
-        pass
+    def run_development(self,target_img):
+        for i,k in enumerate(self.module_tab_dict.keys()):
+            now_tab_name = self.module_tab_dict[k].tabText(self.module_tab_dict[k].currentIndex())
+            val_list = []
+            for i in range(len(self.module_dict[k][now_tab_name].lineedit_list)):
+                val_list.append(float(self.module_dict[k][now_tab_name].lineedit_list[i].text()))
+            target_img = self.module_dict[k][now_tab_name].func(target_img,val_list,0).copy()
+        return target_img
 
-    def box_init_in_simple_dev_box(self,box_title,box_y,box_x,proc_func):
-        proc_box = QtWidgets.QGroupBox(box_title)
-        self.simple_dev_box_layout.addWidget(proc_box,box_y,box_x,1,6)
-        proc_box.setCheckable(True)
-        proc_box_layout = QtGui.QGridLayout()
-        proc_box.setLayout(proc_box_layout)
-        proc_list = []
-        for i,key_name in enumerate(proc_func.keys()):
-            proc_list.append(QtWidgets.QRadioButton(key_name))
-            proc_box_layout.addWidget(proc_list[-1],i,0)
-        proc_list[0].setChecked(True)
-
-        return proc_box,proc_box_layout,proc_list
-
-    def set_img(self, raw_img):
-        height,width = np.shape(raw_img)
-        self.preview_img.setImage(raw_img[height//2-128:height//2+128,width//2-128:width//2+128])
-        pass
-
-    def connect_le(self,):
-        pass
-
-    def preview(self):
-        pass
 
 
 
@@ -895,12 +1182,16 @@ class ImageviewWidget(QtGui.QWidget):
         self.raw_proc_window = QtWidgets.QMainWindow()
         self.raw_proc_window_ui = raw_proc_window()
         self.raw_proc_window_ui.init_window(self.raw_proc_window)
+        self.raw_proc_window_ui.simple_dev_run_btn.clicked.connect(self.run_development)
+        pass
+
+    def run_development(self):
+        self.input_img = self.raw_proc_window_ui.run_development(self.img.image)
+        self.update_img()
         pass
 
     def open_raw_proc_window(self):
         if self.img_is_stored:
-            # prev_img = self.img.image[self.img.height()//2-128:self.img.height()//2+128,
-            #                           self.img.width()//2-128:self.img.width()//2+128]
             prev_img = self.img.image
         else:
             prev_img = np.ones((256,256))*128
@@ -916,7 +1207,7 @@ class ImageviewWidget(QtGui.QWidget):
                 print('cancel')
                 break
             else:
-                print('koko')
+                # print('koko')
                 if self.img_ch==3:
                     if not path_0ch:
                         temp_img_0ch = self.img.image[:,:,0]
@@ -1385,7 +1676,7 @@ class QqriWindow(QtWidgets.QMainWindow):
         self.init_menu()
         self.init_statusBar()
         self.init_analyze_window()
-
+        self.show()
 
     def init_layout(self):
         #
